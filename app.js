@@ -1378,6 +1378,7 @@ function openPersonalModal(id = null) {
     
     personalModal.style.display = 'block';
     lockBodyScroll();
+    applyTimeInputsFormat();
 }
 
 function handlePersonalSubmit(e) {
@@ -2508,6 +2509,7 @@ function openTurnoModal(personalId, fecha, turno = null) {
     
     turnoModal.style.display = 'block';
     lockBodyScroll();
+    applyTimeInputsFormat();
 }
 
 // Función para actualizar el preview de observaciones
@@ -3460,6 +3462,74 @@ function formatDate(date) {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+}
+
+function applyTimeInputsFormat() {
+    const s = getSettings();
+    const force = !!(s && s.force24h);
+    const ids = [
+        'hora-entrada','hora-salida','schedule-start','schedule-end','settings-now-time',
+        'per-start-0','per-end-0','per-start-1','per-end-1','per-start-2','per-end-2',
+        'per-start-3','per-end-3','per-start-4','per-end-4','per-start-5','per-end-5',
+        'per-start-6','per-end-6'
+    ];
+    const pattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+    const normalize = (v) => {
+        const t = (v || '').trim().toLowerCase();
+        if (!t) return '';
+        let ampm = null;
+        let base = t.replace(/\s+/g,'');
+        if (base.endsWith('am')) { ampm = 'am'; base = base.slice(0,-2); }
+        else if (base.endsWith('pm')) { ampm = 'pm'; base = base.slice(0,-2); }
+        const m = base.match(/^(\d{1,2})(?::?(\d{2}))?$/);
+        if (!m) return '';
+        let hh = parseInt(m[1],10);
+        let mm = m[2] != null ? parseInt(m[2],10) : 0;
+        if (Number.isNaN(hh) || Number.isNaN(mm)) return '';
+        if (ampm === 'pm' && hh < 12) hh += 12;
+        if (ampm === 'am' && hh === 12) hh = 0;
+        hh = Math.max(0, Math.min(23, hh));
+        mm = Math.max(0, Math.min(59, mm));
+        const h2 = String(hh).padStart(2,'0');
+        const m2 = String(mm).padStart(2,'0');
+        return `${h2}:${m2}`;
+    };
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (force) {
+            try { el.type = 'text'; } catch {}
+            el.placeholder = 'HH:MM';
+            el.pattern = '^(?:[01]\\d|2[0-3]):[0-5]\\d$';
+            el.setAttribute('inputmode','numeric');
+            el.maxLength = 5;
+            if (!el.dataset.bound24) {
+                el.addEventListener('blur', () => {
+                    const v = normalize(el.value);
+                    if (v && pattern.test(v)) el.value = v;
+                });
+                el.addEventListener('input', () => {
+                    const v = el.value.replace(/[^0-9:]/g,'').slice(0,5);
+                    const digits = v.replace(/:/g,'');
+                    if (digits.length >= 3 && v.indexOf(':') === -1) {
+                        el.value = `${digits.slice(0,2)}:${digits.slice(2,4)}`;
+                    } else {
+                        el.value = v;
+                    }
+                });
+                el.dataset.bound24 = '1';
+            }
+            if (el.value) {
+                const nv = normalize(el.value);
+                if (nv && pattern.test(nv)) el.value = nv;
+            }
+        } else {
+            try { el.type = 'time'; } catch {}
+            el.removeAttribute('placeholder');
+            el.removeAttribute('pattern');
+            el.removeAttribute('inputmode');
+        }
+    });
 }
 
 // Función auxiliar para formatear fechas de forma corta sin afectar por zona horaria
@@ -4704,6 +4774,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             codeMap,
                             customTypes
                         };
+                        const forceEl2 = document.getElementById('force-24h');
+                        newS.force24h = !!(forceEl2 && forceEl2.checked);
                         const useCustomEl2 = document.getElementById('use-custom-now');
                         const dateEl2 = document.getElementById('settings-now-date');
                         const timeEl2 = document.getElementById('settings-now-time');
@@ -4740,6 +4812,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         closeModal(settingsModal);
                         showNotification('Configuraciones guardadas');
                         renderCalendar();
+                        applyTimeInputsFormat();
                     }
                 });
             });
@@ -4754,6 +4827,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cancelSettingsBtn.dataset.boundClick = '1';
         }
     }
+    applyTimeInputsFormat();
 });
 function openSettingsModal() {
     try {
@@ -4784,6 +4858,8 @@ function openSettingsModal() {
     window.__settingsClockInterval = setInterval(updateClock, 1000);
     updateClock();
     if (useCustomEl) useCustomEl.checked = !!(s.customNow && s.customNow.enabled);
+    const force24El = document.getElementById('force-24h');
+    if (force24El) force24El.checked = !!s.force24h;
     if (s.customNow && s.customNow.parts && dateEl && timeEl) {
         const p = s.customNow.parts;
         const m = p.month + 1;
@@ -4875,6 +4951,7 @@ function openSettingsModal() {
     }
     modal.style.display = 'block';
     lockBodyScroll();
+    applyTimeInputsFormat();
     const overlayHandlerSettings = (ev) => {
         if (ev.target === modal) {
             closeModal(modal);
