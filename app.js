@@ -1,6 +1,7 @@
 // Variables globales
 let personal = [];
 let turnos = {}
+let users = []; // Usuarios adicionales creados por Super Admin
 let currentUser = null; // sesión actual: { username, role }
 let adminIdleTimer = null; // temporizador de inactividad para admin
 let adminActivityHandler = null; // handler para reiniciar temporizador
@@ -363,8 +364,8 @@ function closeHamburgerMenu() {
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', () => {
-    loadData();
-    loadSession();
+    loadSession(); // Load session first to determine currentUser
+    loadData();    // Then load data (which depends on currentUser)
     updateSessionUI();
     setupEventListeners();
     // Mostrar mensajes de cierre previo si aplica
@@ -382,6 +383,10 @@ document.addEventListener('DOMContentLoaded', () => {
     renderPersonalList();
     populateCompaneroSelect();
     renderCalendar();
+    
+    // Iniciar verificación automática de turnos completados (cada 1 minuto)
+    setInterval(checkCompletedShifts, 60000);
+
     // Overlay de bienvenida: mostrar solo en la primera carga de la sesión
     const welcomeOverlay = document.getElementById('welcome-overlay');
     if (welcomeOverlay) {
@@ -889,7 +894,8 @@ function renderStats() {
         typesOrder.forEach(t => { counts[t] = 0; });
 
         for (const fecha in turnos) {
-            const y = new Date(fecha).getFullYear();
+            // Fix: Parsear año manualmente para evitar timezone shift
+            const y = parseInt(fecha.split('-')[0], 10);
             if (y !== currentYear) continue;
             const turnoPersona = turnos[fecha][persona.id];
             if (turnoPersona && turnoPersona.tipo) {
@@ -950,7 +956,8 @@ function renderStatsDates() {
 
     // Recopilar fechas del año actual (excluyendo guardias)
     Object.keys(turnos).forEach(fecha => {
-        const y = new Date(fecha).getFullYear();
+        // Fix: Parsear año manualmente
+        const y = parseInt(fecha.split('-')[0], 10);
         if (y !== currentYear) return;
         const turno = turnos[fecha][selectedId];
         if (!turno) return;
@@ -1096,13 +1103,34 @@ function renderPersonalList() {
         return;
     }
 
-    personal.forEach(persona => {
+    // Ordenar personal para mostrar en la lista tal como aparece en el calendario
+    // Esto es necesario para que las flechas de reordenamiento tengan sentido
+    const orderedPersonal = [];
+    
+    // 1. Personal de semana
+    const orderedSemana = sortWithManualOrder(
+        personal.filter(p => p.modalidadTrabajo !== 'sadofe'),
+        'semana'
+    );
+    
+    // 2. Personal de SADOFE
+    const orderedSadofe = sortWithManualOrder(
+        personal.filter(p => p.modalidadTrabajo === 'sadofe'),
+        'sadofe'
+    );
+    
+    // Combinar (primero semana, luego sadofe, igual que en el calendario)
+    orderedPersonal.push(...orderedSemana);
+    orderedPersonal.push(...orderedSadofe);
+
+    orderedPersonal.forEach(persona => {
         const row = document.createElement('tr');
         let usadosVac = 0;
         let usadosEst = 0;
         const yActual = currentYear;
         Object.keys(turnos).forEach(f => {
-            const y = new Date(f).getFullYear();
+            // Fix: Parsear año manualmente
+            const y = parseInt(f.split('-')[0], 10);
             if (y === yActual) {
                 const t = turnos[f][persona.id];
                 if (t && t.tipo === 'vacaciones') usadosVac++;
@@ -1121,6 +1149,14 @@ function renderPersonalList() {
         const ws = persona.workSchedule || null;
         const daysLabel = ws ? getDaysLabel(ws.days) : ((persona.modalidadTrabajo === 'sadofe') ? 'SADOFE' : 'Día de semana');
         const timeLabel = ws ? (ws.type === 'per_day' ? 'Por día' : formatTimeRange(ws.start, ws.end)) : '-';
+        
+        // Determinar si deshabilitar flechas
+        const isSadofe = persona.modalidadTrabajo === 'sadofe';
+        const groupList = isSadofe ? orderedSadofe : orderedSemana;
+        const indexInGroup = groupList.findIndex(p => p.id === persona.id);
+        const canUp = indexInGroup > 0;
+        const canDown = indexInGroup < groupList.length - 1;
+
         row.innerHTML = `
             <td>${persona.nombre}</td>
             <td>${persona.apellido}</td>
@@ -1144,6 +1180,10 @@ function renderPersonalList() {
             </td>
             <td class="action-buttons">
                 <div class="action-buttons-inner">
+                    <div class="order-controls" style="display: flex; flex-direction: column; margin-right: 8px;">
+                        <button class="order-btn up-btn" title="Subir" ${!canUp ? 'disabled' : ''} style="padding: 0; line-height: 1; font-size: 10px; height: 16px; width: 24px; margin-bottom: 2px; cursor: pointer;">▲</button>
+                        <button class="order-btn down-btn" title="Bajar" ${!canDown ? 'disabled' : ''} style="padding: 0; line-height: 1; font-size: 10px; height: 16px; width: 24px; cursor: pointer;">▼</button>
+                    </div>
                     <button class="btn-secondary edit-btn" data-id="${persona.id}">
                         <i class="fas fa-edit"></i>
                     </button>
@@ -1156,8 +1196,29 @@ function renderPersonalList() {
         personalList.appendChild(row);
 
         // Agregar event listeners a los botones
-        row.querySelector('.edit-btn').addEventListener('click', () => editPersonal(persona.id));
-        row.querySelector('.delete-btn').addEventListener('click', () => deletePersonal(persona.id));
+        const upBtn = row.querySelector('.up-btn');
+        const downBtn = row.querySelector('.down-btn');
+        
+        if (upBtn) {
+            upBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                movePersonalRow(persona.id, 'up', isSadofe ? 'sadofe' : 'semana');
+                // Re-renderizar lista para actualizar botones
+                renderPersonalList();
+            });
+        }
+        
+        if (downBtn) {
+            downBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                movePersonalRow(persona.id, 'down', isSadofe ? 'sadofe' : 'semana');
+                // Re-renderizar lista para actualizar botones
+                renderPersonalList();
+            });
+        }
+
+        row.querySelector('.edit-btn').addEventListener('click', () => openPersonalModal(persona.id));
+        row.querySelector('.delete-btn').addEventListener('click', () => confirmDeletePersonal(persona.id));
     });
     populateCompaneroSelect();
 }
@@ -1279,76 +1340,85 @@ function handlePersonalSubmit(e) {
         return;
     }
     e.preventDefault();
-    
-    const id = document.getElementById('personal-id').value || generateId();
-    const nombre = document.getElementById('nombre').value;
-    const apellido = document.getElementById('apellido').value;
-    const modalidadTrabajo = document.getElementById('modalidad-trabajo').value;
-    const turnoPreferente = document.getElementById('turno-preferente').value;
-    const diasVacacionesRaw = document.getElementById('dias-vacaciones').value;
-    const diasEstresRaw = document.getElementById('dias-estres').value;
-    const diasVacaciones = diasVacacionesRaw !== '' ? parseInt(diasVacacionesRaw, 10) : null;
-    const diasEstres = diasEstresRaw !== '' ? parseInt(diasEstresRaw, 10) : null;
-    const workDays = Array.from(document.querySelectorAll('input[name="work-days"]:checked')).map(el => parseInt(el.value, 10)).filter(n => Number.isInteger(n));
-    const scheduleStart = document.getElementById('schedule-start').value || '';
-    const scheduleEnd = document.getElementById('schedule-end').value || '';
-    const applyHolidays = Boolean(document.getElementById('apply-holidays').checked);
-    const isPerDay = Boolean(document.getElementById('schedule-type-perday') && document.getElementById('schedule-type-perday').checked);
-    let workSchedule = null;
-    if (isPerDay) {
-        const perDay = {};
-        ['0','1','2','3','4','5','6'].forEach(d => {
-            const ps = document.getElementById(`per-start-${d}`);
-            const pe = document.getElementById(`per-end-${d}`);
-            const s = ps ? ps.value : '';
-            const e2 = pe ? pe.value : '';
-            if (s) perDay[d] = { start: s, end: e2 || '' };
-        });
-        const perDaysList = Object.keys(perDay).map(x => parseInt(x,10));
-        workSchedule = perDaysList.length > 0 ? { type: 'per_day', perDay, days: perDaysList, applyHolidays } : null;
-    } else {
-        workSchedule = (workDays.length > 0 && scheduleStart && scheduleEnd) ? { type: 'fixed', days: workDays, start: scheduleStart, end: scheduleEnd, applyHolidays } : null;
-    }
-    const isEdit = !!document.getElementById('personal-id').value;
-    const prev = isEdit ? personal.find(p => p.id === id) : null;
-    
-    if (document.getElementById('personal-id').value) {
-        // Editar personal existente
-        const index = personal.findIndex(p => p.id === id);
-        if (index !== -1) {
-            personal[index] = { id, nombre, apellido, modalidadTrabajo, turnoPreferente, diasVacaciones, diasEstres, workSchedule };
-        }
-    } else {
-        // Agregar nuevo personal
-        personal.push({ id, nombre, apellido, modalidadTrabajo, turnoPreferente, diasVacaciones, diasEstres, workSchedule });
-    }
-    
-    renderPersonalList();
-    renderCalendar();
-    
-    // Guardar datos en localStorage
-    saveData();
 
-    // Log de movimiento
-    addMovementLog({
-        action: isEdit ? 'personal_edit' : 'personal_add',
-        entity: 'personal',
-        user: currentUser ? { username: currentUser.username, role: currentUser.role } : null,
-        timestamp: new Date().toISOString(),
-        details: {
-            id,
-            nombre,
-            apellido,
-            modalidadTrabajo,
-            turnoPreferente,
-            diasVacaciones,
-            diasEstres,
-            workSchedule,
-            before: prev || undefined
+    showConfirmModal({
+        title: 'Confirmar cambios',
+        message: '¿Está seguro que desea guardar los cambios? La página se recargará para aplicar la configuración.',
+        onAccept: () => {
+            const id = document.getElementById('personal-id').value || generateId();
+            const nombre = document.getElementById('nombre').value;
+            const apellido = document.getElementById('apellido').value;
+            const modalidadTrabajo = document.getElementById('modalidad-trabajo').value;
+            const turnoPreferente = document.getElementById('turno-preferente').value;
+            const diasVacacionesRaw = document.getElementById('dias-vacaciones').value;
+            const diasEstresRaw = document.getElementById('dias-estres').value;
+            const diasVacaciones = diasVacacionesRaw !== '' ? parseInt(diasVacacionesRaw, 10) : null;
+            const diasEstres = diasEstresRaw !== '' ? parseInt(diasEstresRaw, 10) : null;
+            const workDays = Array.from(document.querySelectorAll('input[name="work-days"]:checked')).map(el => parseInt(el.value, 10)).filter(n => Number.isInteger(n));
+            const scheduleStart = document.getElementById('schedule-start').value || '';
+            const scheduleEnd = document.getElementById('schedule-end').value || '';
+            const applyHolidays = Boolean(document.getElementById('apply-holidays').checked);
+            const isPerDay = Boolean(document.getElementById('schedule-type-perday') && document.getElementById('schedule-type-perday').checked);
+            let workSchedule = null;
+            if (isPerDay) {
+                const perDay = {};
+                ['0','1','2','3','4','5','6'].forEach(d => {
+                    const ps = document.getElementById(`per-start-${d}`);
+                    const pe = document.getElementById(`per-end-${d}`);
+                    const s = ps ? ps.value : '';
+                    const e2 = pe ? pe.value : '';
+                    if (s) perDay[d] = { start: s, end: e2 || '' };
+                });
+                const perDaysList = Object.keys(perDay).map(x => parseInt(x,10));
+                workSchedule = perDaysList.length > 0 ? { type: 'per_day', perDay, days: perDaysList, applyHolidays } : null;
+            } else {
+                workSchedule = (workDays.length > 0 && scheduleStart && scheduleEnd) ? { type: 'fixed', days: workDays, start: scheduleStart, end: scheduleEnd, applyHolidays } : null;
+            }
+            const isEdit = !!document.getElementById('personal-id').value;
+            const prev = isEdit ? personal.find(p => p.id === id) : null;
+            
+            if (document.getElementById('personal-id').value) {
+                // Editar personal existente
+                const index = personal.findIndex(p => p.id === id);
+                if (index !== -1) {
+                    personal[index] = { id, nombre, apellido, modalidadTrabajo, turnoPreferente, diasVacaciones, diasEstres, workSchedule };
+                }
+            } else {
+                // Agregar nuevo personal
+                personal.push({ id, nombre, apellido, modalidadTrabajo, turnoPreferente, diasVacaciones, diasEstres, workSchedule });
+            }
+            
+            renderPersonalList();
+            renderCalendar();
+            
+            // Guardar datos en localStorage
+            saveData();
+
+            // Log de movimiento
+            addMovementLog({
+                action: isEdit ? 'personal_edit' : 'personal_add',
+                entity: 'personal',
+                user: currentUser ? { username: currentUser.username, role: currentUser.role } : null,
+                timestamp: new Date().toISOString(),
+                details: {
+                    id,
+                    nombre,
+                    apellido,
+                    modalidadTrabajo,
+                    turnoPreferente,
+                    diasVacaciones,
+                    diasEstres,
+                    workSchedule,
+                    before: prev || undefined
+                }
+            });
+            
+            closeModal(personalModal);
+            
+            // Recargar la página para asegurar consistencia total
+            window.location.reload();
         }
     });
-    
-    closeModal(personalModal);
 }
 
 function editPersonal(id) {
@@ -1431,6 +1501,41 @@ function sortWithManualOrder(list, modalidad) {
     });
 }
 
+function movePersonalRow(personalId, direction, modalidad) {
+    if (!isAdmin()) return;
+
+    // 1. Obtener todo el personal de esta modalidad
+    const group = personal.filter(p => {
+        if (modalidad === 'sadofe') return p.modalidadTrabajo === 'sadofe';
+        return p.modalidadTrabajo !== 'sadofe';
+    });
+
+    // 2. Ordenarlos tal cual se muestran actualmente
+    const sortedGroup = sortWithManualOrder(group, modalidad);
+    
+    // 3. Obtener IDs
+    const currentOrderIds = sortedGroup.map(p => String(p.id));
+    
+    // 4. Encontrar índice
+    const index = currentOrderIds.indexOf(String(personalId));
+    if (index === -1) return;
+
+    // 5. Swap
+    if (direction === 'up') {
+        if (index > 0) {
+            [currentOrderIds[index], currentOrderIds[index - 1]] = [currentOrderIds[index - 1], currentOrderIds[index]];
+        }
+    } else if (direction === 'down') {
+        if (index < currentOrderIds.length - 1) {
+            [currentOrderIds[index], currentOrderIds[index + 1]] = [currentOrderIds[index + 1], currentOrderIds[index]];
+        }
+    }
+
+    // 6. Guardar y renderizar
+    saveManualOrder(modalidad, currentOrderIds);
+    renderCalendar();
+}
+
 function getHolidayStore() {
     try {
         const raw = localStorage.getItem('vigilancia-holidays');
@@ -1476,6 +1581,61 @@ function toggleHoliday(year, month, day) {
     current.sort((a, b) => a - b);
     store[key] = current;
     saveHolidayStore(store);
+}
+
+// Verificar y marcar turnos completados y activos automáticamente
+function checkCompletedShifts() {
+    const cells = document.querySelectorAll('.calendar-cell[data-shift-end]');
+    const now = new Date();
+    
+    cells.forEach(cell => {
+        const endStr = cell.getAttribute('data-shift-end');
+        const startStr = cell.getAttribute('data-shift-start');
+        if (!endStr) return;
+        
+        const endDate = new Date(endStr);
+        const startDate = startStr ? new Date(startStr) : null;
+        
+        // Estado Completado
+        if (now > endDate) {
+            if (!cell.classList.contains('completed')) {
+                cell.classList.add('completed');
+            }
+            if (cell.classList.contains('active')) {
+                cell.classList.remove('active');
+            }
+        } 
+        // Estado Activo (En curso)
+        else if (startDate && now >= startDate && now <= endDate) {
+            // Verificar si este turno tiene permitido ser "Activo" (blinking)
+            // Por defecto, solo guardias, cambios de guardia y compensatorios con horario.
+            const canBeActive = cell.getAttribute('data-can-be-active') === 'true';
+            
+            if (canBeActive) {
+                if (!cell.classList.contains('active')) {
+                    cell.classList.add('active');
+                }
+            } else {
+                // Si no puede ser activo, asegurarnos de que no tenga la clase
+                if (cell.classList.contains('active')) {
+                    cell.classList.remove('active');
+                }
+            }
+            
+            if (cell.classList.contains('completed')) {
+                cell.classList.remove('completed');
+            }
+        } 
+        // Estado Futuro (Reset)
+        else {
+            if (cell.classList.contains('completed')) {
+                cell.classList.remove('completed');
+            }
+            if (cell.classList.contains('active')) {
+                cell.classList.remove('active');
+            }
+        }
+    });
 }
 
 function renderCalendar() {
@@ -1556,11 +1716,13 @@ function renderCalendar() {
         const nameCell = document.createElement('td');
         nameCell.classList.add('name-cell');
         nameCell.textContent = `${persona.apellido}, ${persona.nombre}`;
+        
         // Mostrar cursor de arrastre solo si es admin
         try {
             const canDrag = isAdmin();
             nameCell.style.cursor = canDrag ? 'grab' : 'default';
         } catch {}
+
         // Permitir arrastre solo para admin
         nameCell.addEventListener('mousedown', (ev) => {
             if (!isAdmin()) {
@@ -1650,6 +1812,54 @@ function renderCalendar() {
                     cellContent.classList.add('turno-guardia_fija');
                 }
                 
+                // Calcular fecha inicio y fin del turno para autocompletado y estado activo
+                try {
+                    const [y, m, d] = dateStr.split('-').map(Number);
+                    let shiftEnd = new Date(y, m - 1, d);
+                    let shiftStart = new Date(y, m - 1, d);
+                    let canBeActive = false; // Indica si este tipo de turno admite estado "Activo" (blinking)
+
+                    // Tipos de turno que implican presencia física y por tanto pueden estar "Activos"
+                    const activeTypes = ['guardia_fija', 'cambios_guardia', 'compensatorio'];
+                    if (activeTypes.includes(turno.tipo)) {
+                        canBeActive = true;
+                    }
+                    
+                    if (turno.horaSalida) {
+                        const [h, min] = turno.horaSalida.split(':').map(Number);
+                        shiftEnd.setHours(h, min, 0, 0);
+                        
+                        // Calcular inicio
+                        if (turno.horaEntrada) {
+                            const [sh, sm] = turno.horaEntrada.split(':').map(Number);
+                            shiftStart.setHours(sh, sm, 0, 0);
+
+                            // Si hora inicio > hora fin, el fin es al día siguiente
+                            if (sh > h || (sh === h && sm > min)) {
+                                shiftEnd.setDate(shiftEnd.getDate() + 1);
+                            }
+                        } else {
+                            // Si no hay hora de entrada, asumir principio del día (00:00)
+                            shiftStart.setHours(0, 0, 0, 0);
+                        }
+                    } else {
+                        // Si no hay horario, asumir todo el día (00:00 a 23:59:59)
+                        shiftStart.setHours(0, 0, 0, 0);
+                        shiftEnd.setHours(23, 59, 59, 999);
+                        
+                        // Si no tiene horario específico, NO debería parpadear como activo
+                        // salvo que sea una guardia explícita sin horario (raro, pero posible)
+                        if (turno.tipo !== 'guardia_fija') {
+                            canBeActive = false;
+                        }
+                    }
+                    cellContent.setAttribute('data-shift-end', shiftEnd.toISOString());
+                    cellContent.setAttribute('data-shift-start', shiftStart.toISOString());
+                    if (canBeActive) {
+                        cellContent.setAttribute('data-can-be-active', 'true');
+                    }
+                } catch (e) { console.error('Error calculating shift times', e); }
+
                 // Crear un mapa de códigos para mejor rendimiento
                 const codigoMap = {
                     'guardia_fija': 'G',
@@ -1766,6 +1976,9 @@ function renderCalendar() {
     calendarBody.appendChild(bodyFragment);
 
     // Guía vertical deshabilitada
+    
+    // Verificar estado completado
+    checkCompletedShifts();
 }
 
 function changeMonth(delta) {
@@ -1820,67 +2033,119 @@ function formatDateFromParts({ year, month, day }) {
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function autoMarkScheduledShifts() {
+function autoMarkScheduledShifts(checkAllDays = true) {
     try {
-        const tzNow = getNowInTimeZone('America/Argentina/Buenos_Aires');
-        const s = getSettings();
-        const tz = (s && s.timezone) ? s.timezone : 'America/Argentina/Buenos_Aires';
-        const tzNow2 = getNowInTimeZone(tz);
-        const year = tzNow2.year;
-        const month = tzNow2.month;
-        const day = tzNow2.day;
-        const dow = tzNow2.dow;
-        const minutesNow = tzNow2.hour * 60 + tzNow2.minute;
-        const todayStr = formatDateFromParts(tzNow2);
+        // Usar hora local del sistema para la automatización
+        // Esto cumple con "horario y fecha de mismo ordenador"
+        const now = new Date();
+        const nowYear = now.getFullYear();
+        const nowMonth = now.getMonth(); 
+        const nowDay = now.getDate();
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+        // Definir fecha de inicio y fin para el bucle
+        // Si checkAllDays es true, chequeamos desde el 1 de Enero del año actual (para cubrir todo el año)
+        // Si es false, solo chequeamos el día de hoy.
+        let loopDate = checkAllDays ? new Date(nowYear, 0, 1) : new Date(nowYear, nowMonth, nowDay);
+        
+        // Fecha límite: hoy (no tocar futuro)
+        // Ajustamos 'today' a medianoche para comparar fechas correctamente
+        const todayDate = new Date(nowYear, nowMonth, nowDay);
+
         let changed = false;
 
-        personal.forEach(p => {
-            const ws = p && p.workSchedule;
-            if (!ws) return;
-            const allowHoliday = Boolean(ws.applyHolidays);
-            const isHol = isHoliday(year, month, day);
-            if (isHol && !allowHoliday) return;
-            let startVal = null;
-            let endVal = '';
-            if (ws.type === 'per_day' && ws.perDay && ws.perDay[String(dow)]) {
-                startVal = ws.perDay[String(dow)].start || null;
-                endVal = ws.perDay[String(dow)].end || '';
-            } else if (Array.isArray(ws.days) && ws.days.includes(dow) && ws.start) {
-                startVal = ws.start;
-                endVal = ws.end || '';
-            }
-            const startMin = timeStrToMinutes(startVal);
-            if (startMin == null) return;
-            if (minutesNow === startMin) {
-                if (!turnos[todayStr]) turnos[todayStr] = {};
-                if (!turnos[todayStr][p.id]) {
-                    turnos[todayStr][p.id] = {
-                        tipo: 'guardia_fija',
-                        horaEntrada: startVal,
-                        horaSalida: endVal,
-                        observaciones: ''
-                    };
-                    changed = true;
-                }
-            }
-        });
+        while (loopDate <= todayDate) {
+            const y = loopDate.getFullYear();
+            const m = loopDate.getMonth();
+            const d = loopDate.getDate();
+            const dow = loopDate.getDay();
+            const dateStr = formatDateFromParts({ year: y, month: m, day: d });
 
+            // Si es un día pasado, la hora actual "virtual" es 23:59 (ya pasó todo el día)
+            // Si es hoy, usamos la hora actual real.
+            const isToday = (loopDate.getTime() === todayDate.getTime());
+            const checkMinutes = isToday ? nowMinutes : 1440; // 1440 mins = 24h
+
+            personal.forEach(p => {
+                const ws = p && p.workSchedule;
+                if (!ws) return;
+                
+                // Verificar feriados
+                // SADOFE siempre trabaja feriados
+                const isSadofe = p.modalidadTrabajo === 'sadofe';
+                // Detectar configuración manual de SADOFE o "Fines de Semana y Feriados"
+                // Si trabaja Sábado o Domingo Y tiene "Aplicar en feriados", asumimos que cubre feriados también.
+                const days = ws.days || [];
+                const isWeekendWorker = Array.isArray(days) && (days.includes(0) || days.includes(6));
+                
+                // Efectivo SADOFE si es modalidad explícita o si es trabajador de fin de semana con feriados activados
+                const effectiveSadofe = isSadofe || (isWeekendWorker && ws.applyHolidays);
+
+                const allowHoliday = Boolean(ws.applyHolidays) || effectiveSadofe;
+                const isHol = isHoliday(y, m, d);
+                if (isHol && !allowHoliday) return;
+                
+                let startVal = null;
+                let endVal = '';
+                
+                // Obtener horario según configuración
+                if (ws.type === 'per_day' && ws.perDay && ws.perDay[String(dow)]) {
+                    startVal = ws.perDay[String(dow)].start || null;
+                    endVal = ws.perDay[String(dow)].end || '';
+                } else if (Array.isArray(ws.days) && (ws.days.includes(dow) || (isHol && effectiveSadofe)) && ws.start) {
+                    startVal = ws.start;
+                    endVal = ws.end || '';
+                }
+                
+                if (!startVal) return;
+
+                const startMin = timeStrToMinutes(startVal);
+                if (startMin == null) return;
+
+                // CONDICIÓN CLAVE: Si ya pasamos la hora de entrada, debe existir el turno.
+                if (checkMinutes >= startMin) {
+                    if (!turnos[dateStr]) turnos[dateStr] = {};
+                    
+                    // Solo crear si no existe (RESPETA CAMBIOS MANUALES)
+                    if (!turnos[dateStr][p.id]) {
+                        turnos[dateStr][p.id] = {
+                            tipo: 'guardia_fija',
+                            horaEntrada: startVal,
+                            horaSalida: endVal,
+                            observaciones: ''
+                        };
+                        changed = true;
+                    }
+                }
+            });
+
+            // Avanzar al siguiente día
+            loopDate.setDate(loopDate.getDate() + 1);
+        }
+            
         if (changed) {
             saveData();
+            // Solo renderizar si estamos viendo el mes actual o si los cambios afectaron la vista actual
+            // Para simplificar, si hubo cambios, renderizamos.
             renderCalendar();
         }
-    } catch {}
+        
+        // Actualizar estados visuales (Completado/Activo) independientemente de si hubo cambios en los datos
+        checkCompletedShifts();
+    } catch (e) { console.error(e); }
 }
 
 function startAlignedMinuteChecker() {
     const now = new Date();
     const delay = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
-    setTimeout(() => {
-        autoMarkScheduledShifts();
-        setInterval(autoMarkScheduledShifts, 60000);
-    }, Math.max(0, delay));
+    // setInterval(autoMarkScheduledShifts, 60000);
 }
-startAlignedMinuteChecker();
+
+// Ejecutar inmediatamente al cargar la página (chequeo completo para recuperar días perdidos)
+autoMarkScheduledShifts(true);
+
+// Ejecutar cada 5 segundos para actualización "instantánea" (solo chequea el día de hoy)
+setInterval(() => autoMarkScheduledShifts(false), 5000);
 
 // Exportar calendario a PDF
 async function exportCalendarToPDF() {
@@ -2362,7 +2627,11 @@ function openTurnoModal(personalId, fecha, turno = null) {
         // Cargar sugerencia de horario según el calendario laboral del personal
         const ws = persona && persona.workSchedule;
         if (ws) {
-            const dow = new Date(fecha).getDay();
+            // Fix: Parsear fecha explícitamente para evitar desfase de zona horaria
+            const fParts = fecha.split('-');
+            const fDate = new Date(parseInt(fParts[0]), parseInt(fParts[1]) - 1, parseInt(fParts[2]));
+            const dow = fDate.getDay();
+            
             if (ws.type === 'per_day' && ws.perDay && ws.perDay[String(dow)]) {
                 const info = ws.perDay[String(dow)];
                 if (info && info.start && horaEntrada) horaEntrada.value = info.start;
@@ -2541,7 +2810,7 @@ function handleTurnoSubmit(e) {
     function countAssignedDaysByYear(personalIdCheck, tipoCheck) {
         const counts = {};
         Object.keys(turnos).forEach(f => {
-            const y = new Date(f).getFullYear();
+            const y = parseInt(f.split('-')[0], 10);
             const t = turnos[f][personalIdCheck];
             if (t && t.tipo === tipoCheck) {
                 counts[y] = (counts[y] || 0) + 1;
@@ -2568,7 +2837,7 @@ function handleTurnoSubmit(e) {
     }
 
     function computeSingleDayByYear(dateStr) {
-        const y = new Date(dateStr).getFullYear();
+        const y = parseInt(dateStr.split('-')[0], 10);
         return { [y]: 1 };
     }
 
@@ -3208,6 +3477,15 @@ async function handleLoginSubmit(e) {
     } else if ((u === 'usuario' || u === 'lectura') && p === u) {
         role = 'usuario';
     } else {
+        // Verificar usuarios personalizados
+        if (users.length === 0) loadUsers();
+        const foundUser = users.find(user => user.username.toLowerCase() === u);
+        if (foundUser && p && (await sha256Hex(p)) === foundUser.passwordHash) {
+            role = foundUser.role || 'admin';
+        }
+    }
+
+    if (!role) {
         // Registrar intento fallido de login
         addMovementLog({
             action: 'login_failed',
@@ -3509,25 +3787,28 @@ function removeMultiDayEvent(personalId, fechaInicio, fechaFin) {
 // Persistencia de datos
 function saveData() {
     try {
+        const { pKey, tKey } = getDataKeys();
+
         // Intentar usar localStorage primero
         if (typeof(Storage) !== "undefined") {
-            localStorage.setItem('vigilancia-personal', JSON.stringify(personal));
-            localStorage.setItem('vigilancia-turnos', JSON.stringify(turnos));
-            console.log('Datos guardados correctamente en localStorage');
+            localStorage.setItem(pKey, JSON.stringify(personal));
+            localStorage.setItem(tKey, JSON.stringify(turnos));
+            console.log(`Datos guardados correctamente en localStorage (${pKey})`);
             // Respaldo automático versionado (throttled)
             scheduleAutoBackup();
         } else {
             // Fallback: usar cookies si localStorage no está disponible
-            setCookie('vigilancia-personal', JSON.stringify(personal), 365);
-            setCookie('vigilancia-turnos', JSON.stringify(turnos), 365);
+            setCookie(pKey, JSON.stringify(personal), 365);
+            setCookie(tKey, JSON.stringify(turnos), 365);
             console.log('Datos guardados en cookies (fallback)');
         }
     } catch (e) {
         console.error('Error guardando datos:', e);
         // Intentar fallback con cookies
         try {
-            setCookie('vigilancia-personal', JSON.stringify(personal), 365);
-            setCookie('vigilancia-turnos', JSON.stringify(turnos), 365);
+            const { pKey, tKey } = getDataKeys();
+            setCookie(pKey, JSON.stringify(personal), 365);
+            setCookie(tKey, JSON.stringify(turnos), 365);
             showNotification('Datos guardados usando cookies (modo compatibilidad)');
         } catch (cookieError) {
             console.error('Error guardando en cookies:', cookieError);
@@ -4259,20 +4540,60 @@ function renderMovementLogDetailsHTML(log) {
     return '<p>Sin detalles</p>';
 }
 
+function loadUsers() {
+    try {
+        if (typeof(Storage) !== "undefined") {
+            const saved = localStorage.getItem('vigilancia-users');
+            if (saved) {
+                users = JSON.parse(saved);
+                if (!Array.isArray(users)) users = [];
+            }
+        }
+    } catch (e) {
+        console.error('Error cargando usuarios:', e);
+        users = [];
+    }
+}
+
+function saveUsers() {
+    try {
+        if (typeof(Storage) !== "undefined") {
+            localStorage.setItem('vigilancia-users', JSON.stringify(users));
+        }
+    } catch (e) {
+        console.error('Error guardando usuarios:', e);
+    }
+}
+
+function getDataKeys() {
+    let pKey = 'vigilancia-personal';
+    let tKey = 'vigilancia-turnos';
+    
+    // Si hay usuario logueado y es un usuario creado (aislado)
+    if (currentUser && users.some(u => u.username === currentUser.username)) {
+        pKey = `vigilancia-personal-${currentUser.username}`;
+        tKey = `vigilancia-turnos-${currentUser.username}`;
+    }
+    return { pKey, tKey };
+}
+
 function loadData() {
+    loadUsers(); // Asegurar que users estén cargados
+    
     try {
         let savedPersonal, savedTurnos;
+        const { pKey, tKey } = getDataKeys();
         
         // Intentar cargar desde localStorage primero
         if (typeof(Storage) !== "undefined") {
-            savedPersonal = localStorage.getItem('vigilancia-personal');
-            savedTurnos = localStorage.getItem('vigilancia-turnos');
+            savedPersonal = localStorage.getItem(pKey);
+            savedTurnos = localStorage.getItem(tKey);
         }
         
         // Si no hay datos en localStorage, intentar cookies
         if (!savedPersonal || !savedTurnos) {
-            savedPersonal = savedPersonal || getCookie('vigilancia-personal');
-            savedTurnos = savedTurnos || getCookie('vigilancia-turnos');
+            savedPersonal = savedPersonal || getCookie(pKey);
+            savedTurnos = savedTurnos || getCookie(tKey);
         }
         
         if (savedPersonal) {
@@ -4285,6 +4606,8 @@ function loadData() {
                 console.error('Error parsing personal data:', e);
                 personal = [];
             }
+        } else {
+            personal = [];
         }
         
         if (savedTurnos) {
@@ -4311,9 +4634,11 @@ function loadData() {
                 console.error('Error parsing turnos data:', e);
                 turnos = {};
             }
+        } else {
+            turnos = {};
         }
         
-        console.log('Datos cargados:', { personal: personal.length, turnos: Object.keys(turnos).length });
+        console.log(`Datos cargados (${pKey}):`, { personal: personal.length, turnos: Object.keys(turnos).length });
     } catch (e) {
         console.error('Error accediendo a almacenamiento:', e);
         showNotification('Advertencia: No se pudieron cargar los datos guardados.');
@@ -4721,6 +5046,117 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     applyTimeInputsFormat();
 });
+
+async function handleAddUserSubmit() {
+    const uInput = document.getElementById('new-user-username');
+    const pInput = document.getElementById('new-user-password');
+    if (!uInput || !pInput) return;
+    
+    const u = uInput.value.trim().toLowerCase();
+    const p = pInput.value.trim();
+    
+    if (!u || !p) {
+        showNotification('Debe ingresar usuario y contraseña.');
+        return;
+    }
+    
+    // Check if user exists (including reserved ones)
+    if (['admin', 'superadmin', 'usuario', 'lectura'].includes(u)) {
+        showNotification('Nombre de usuario reservado.');
+        return;
+    }
+    
+    if (users.length === 0) loadUsers();
+    if (users.some(user => user.username === u)) {
+        showNotification('El usuario ya existe.');
+        return;
+    }
+    
+    const hash = await sha256Hex(p);
+    const newUser = {
+        username: u,
+        passwordHash: hash,
+        role: 'admin', // Isolated admins
+        createdBy: 'superadmin',
+        createdAt: new Date().toISOString()
+    };
+    
+    users.push(newUser);
+    saveUsers();
+    renderSettingsUserList();
+    
+    uInput.value = '';
+    pInput.value = '';
+    showNotification(`Usuario ${u} creado correctamente.`);
+}
+
+function handleDeleteUser(username) {
+    showConfirmModal({
+        title: 'Eliminar usuario',
+        message: `¿Está seguro de eliminar al usuario ${username}? Esto eliminará también sus datos asociados.`,
+        onAccept: () => {
+            users = users.filter(u => u.username !== username);
+            saveUsers();
+            
+            // Eliminar datos asociados
+            try {
+                localStorage.removeItem(`vigilancia-personal-${username}`);
+                localStorage.removeItem(`vigilancia-turnos-${username}`);
+            } catch (e) {
+                console.error('Error eliminando datos de usuario:', e);
+            }
+            
+            renderSettingsUserList();
+            showNotification('Usuario eliminado.');
+        }
+    });
+}
+
+function renderSettingsUserList() {
+    const list = document.getElementById('settings-user-list');
+    if (!list) return;
+    
+    if (users.length === 0) loadUsers();
+    
+    list.innerHTML = '';
+    
+    if (users.length === 0) {
+        list.innerHTML = '<tr><td colspan="3" style="padding:10px;text-align:center;color:#666;">No hay usuarios creados.</td></tr>';
+        return;
+    }
+    
+    users.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #eee';
+        
+        const tdName = document.createElement('td');
+        tdName.style.padding = '8px';
+        tdName.textContent = u.username;
+        
+        const tdRole = document.createElement('td');
+        tdRole.style.padding = '8px';
+        tdRole.textContent = u.role || 'admin';
+        
+        const tdActions = document.createElement('td');
+        tdActions.style.padding = '8px';
+        
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn-danger';
+        delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+        delBtn.style.padding = '4px 8px';
+        delBtn.style.fontSize = '12px';
+        delBtn.onclick = () => handleDeleteUser(u.username);
+        
+        tdActions.appendChild(delBtn);
+        
+        tr.appendChild(tdName);
+        tr.appendChild(tdRole);
+        tr.appendChild(tdActions);
+        
+        list.appendChild(tr);
+    });
+}
+
 function openSettingsModal() {
     try {
         closeHamburgerMenu();
@@ -4730,6 +5166,24 @@ function openSettingsModal() {
         showNotification('No se encontró el modal de configuraciones');
         return;
     }
+
+    // Gestión de usuarios (solo Super Admin)
+    const userMgmtSection = document.getElementById('user-management-section');
+    if (userMgmtSection) {
+        if (isSuperAdmin()) {
+            userMgmtSection.style.display = 'block';
+            renderSettingsUserList();
+            
+            const addUserBtn = document.getElementById('add-user-btn');
+            if (addUserBtn && !addUserBtn.dataset.boundClick) {
+                addUserBtn.addEventListener('click', handleAddUserSubmit);
+                addUserBtn.dataset.boundClick = '1';
+            }
+        } else {
+            userMgmtSection.style.display = 'none';
+        }
+    }
+
     const s = getSettings();
     const tzInput = document.getElementById('settings-timezone');
     if (tzInput) tzInput.value = s.timezone || 'America/Argentina/Buenos_Aires';

@@ -226,6 +226,31 @@
                             </div>
                         </div>
                     </div>
+                    <fieldset class="form-group" id="user-management-section" style="display:none;">
+                        <legend>Gestión de Usuarios</legend>
+                        <div class="user-list-container" style="margin-bottom: 15px;">
+                            <table class="user-list-table" style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="border-bottom: 1px solid #ddd; text-align: left;">
+                                        <th style="padding: 8px;">Usuario</th>
+                                        <th style="padding: 8px;">Rol</th>
+                                        <th style="padding: 8px;">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="settings-user-list">
+                                    <!-- Lista de usuarios generada dinámicamente -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="add-user-form" style="border-top: 1px solid #eee; padding-top: 15px;">
+                            <h4 style="margin-bottom: 10px;">Agregar Nuevo Usuario</h4>
+                            <div class="form-group">
+                                <input type="text" id="new-user-username" placeholder="Nombre de usuario" />
+                                <input type="password" id="new-user-password" placeholder="Contraseña" />
+                                <button type="button" id="add-user-btn" class="btn-secondary">Crear Usuario</button>
+                            </div>
+                        </div>
+                    </fieldset>
                     <fieldset class="form-group">
                         <legend>Códigos de turnos</legend>
                         <div class="codes-table">

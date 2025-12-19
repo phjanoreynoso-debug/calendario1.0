@@ -243,13 +243,14 @@ tbody tr:nth-child(odd) {
     align-items: center;
     justify-content: center;
     flex-wrap: nowrap;
+    padding-top: 25px;
 }
 
 #personal-table td.action-buttons {
     vertical-align: middle;
     text-align: center;
     width: 120px;
-    padding: 0;
+    padding: 25px 0 0 0;
 }
 
 .action-buttons-inner {
@@ -622,6 +623,66 @@ tbody tr:nth-child(odd) {
     color: #555;
 }
 
+/* Estado Completado (Turno Finalizado) */
+.calendar-cell.completed {
+    opacity: 0.7;
+    filter: grayscale(0.5);
+    position: relative;
+    border-style: dashed;
+}
+
+.calendar-cell.completed::after {
+    content: '✓';
+    position: absolute;
+    bottom: -4px;
+    right: -2px;
+    font-size: 14px;
+    color: #28a745;
+    font-weight: 900;
+    text-shadow: 0 0 2px white;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    z-index: 5;
+}
+
+/* Estado Activo (Turno En Curso) */
+.calendar-cell.active {
+    box-shadow: 0 0 6px 2px rgba(40, 167, 69, 0.6);
+    border-color: #28a745 !important;
+    position: relative;
+    z-index: 2;
+    animation: pulse-active 2s infinite;
+}
+
+.calendar-cell.active::after {
+    content: '●'; /* Punto indicador de actividad */
+    position: absolute;
+    top: -4px;
+    right: -2px;
+    font-size: 10px;
+    color: #28a745;
+    text-shadow: 0 0 2px white;
+    z-index: 5;
+}
+
+@keyframes pulse-active {
+    0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(40, 167, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+}
+
+/* Ensure tooltip still works and is readable */
+.calendar-cell.completed:hover,
+.calendar-cell.active:hover {
+    opacity: 1;
+    filter: none;
+    z-index: 10;
+}
+
 /* Estilos para los diferentes tipos de turnos - Colores más contrastantes */
 .turno-guardia_fija {
     background-color: #cce7ff; /* Azul más intenso */
@@ -774,6 +835,11 @@ tbody tr:nth-child(odd) {
     background-color: rgba(0, 0, 0, 0.5);
     /* Evitar que el scroll dentro del modal se propague al fondo */
     overscroll-behavior: contain;
+}
+
+/* Modal de confirmación debe estar siempre por encima */
+#confirm-modal {
+    z-index: 10000 !important;
 }
 
 /* Bloquear scroll del fondo cuando un modal está abierto */
@@ -2360,6 +2426,48 @@ body.menu-open { overflow: hidden; }
     box-sizing: border-box;
     display: block;
 }
+
+/* Ajuste específico para los inputs de horario (side-by-side) */
+#personal-modal .horario-inputs input[type="time"] {
+    max-width: 140px; /* Inputs de hora más cortos para estar lado a lado */
+    flex: 1; /* Ocupar espacio equitativamente */
+}
+
+/* Estilo pill para inputs del modal personal */
+#personal-modal input[type="text"],
+#personal-modal input[type="number"],
+#personal-modal input[type="time"],
+#personal-modal select {
+    width: 100%;
+    max-width: 280px; /* Ancho máximo reducido para inputs "más cortos" */
+    border-radius: 20px;
+    padding: 8px 16px;
+    border: 1px solid #e2e8f0;
+    background-color: #f8fafc;
+    color: #4a5568;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+}
+
+#personal-modal input:hover,
+#personal-modal select:hover {
+    border-color: #cbd5e1;
+    background-color: #fff;
+}
+
+#personal-modal input:focus,
+#personal-modal select:focus {
+    outline: none;
+    border-color: #3498db;
+    background-color: #fff;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+#personal-modal .btn-primary,
+#personal-modal .btn-secondary {
+    border-radius: 20px;
+    padding: 8px 16px;
+}
 .hamburger-menu .btn-secondary { background-color: #94a3b8; }
 .hamburger-menu .btn-secondary:hover { background-color: #64748b; transform: translateY(-1px); }
 .hamburger-menu .btn-info { background-color: #22c55e; }
@@ -2634,12 +2742,125 @@ body.menu-open { overflow: hidden; }
     color: #111827;
 }
 #settings-modal .clock-config .clock-edit {
-    display: grid;
-    grid-template-columns: 160px 120px 22px auto;
+    display: flex;
     gap: 8px;
     align-items: center;
     margin-top: 6px;
 }
-#settings-modal .clock-config .inline { font-size: 13px; color: #374151; align-self: center; }
+
+#settings-modal .clock-config .clock-edit input[type="date"],
+#settings-modal .clock-config .clock-edit input[type="time"],
+#settings-now-date,
+#settings-now-time,
+#settings-timezone,
+#sector-input,
+#settings-current-clock {
+    width: auto;
+    max-width: 100%;
+    display: inline-block;
+    padding: 4px 10px;
+    font-size: 0.85rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    color: #4a5568;
+    background-color: #f8fafc;
+    font-family: inherit;
+    transition: all 0.2s ease;
+    flex: 0 0 auto; /* Prevent growing in flex containers */
+}
+
+#settings-modal .clock-config .clock-edit input[type="date"]:hover,
+#settings-modal .clock-config .clock-edit input[type="time"]:hover,
+#settings-now-date:hover,
+#settings-now-time:hover,
+#settings-timezone:hover,
+#sector-input:hover {
+    border-color: #cbd5e1;
+    background-color: #fff;
+}
+
+#settings-modal .clock-config .clock-edit input[type="date"]:focus,
+#settings-modal .clock-config .clock-edit input[type="time"]:focus,
+#settings-now-date:focus,
+#settings-now-time:focus,
+#settings-timezone:focus,
+#sector-input:focus {
+    outline: none;
+    border-color: #3498db;
+    background-color: #fff;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+#settings-current-clock {
+    min-width: 60px;
+    text-align: center;
+    cursor: default;
+    background-color: #f1f5f9; /* Slightly darker for readonly */
+}
+
+#settings-timezone {
+    min-width: 200px; /* Ensure enough space for timezone text */
+}
+
+#sector-input {
+    min-width: 120px;
+}
+
+#settings-modal .clock-config .clock-edit input[type="checkbox"] {
+    width: auto;
+    margin-left: 8px;
+    cursor: pointer;
+}#settings-modal .clock-config .inline { font-size: 13px; color: #374151; align-self: center; }
 #settings-modal .custom-types-list .custom-type-row .ct-check-wrap { display: flex; flex-direction: column; gap: 4px; }
 #settings-modal .custom-types-list .custom-type-row .ct-check-wrap input[type="checkbox"] { width: 18px; height: 18px; }
+
+/* Estilos para el formulario 'Agregar Nuevo Usuario' y inputs de Seguridad */
+.add-user-form input[type="text"],
+.add-user-form input[type="password"],
+#new-admin-password,
+#new-superadmin-password {
+    width: 100%;
+    max-width: 280px; /* Limitar el ancho para que sean "más cortas" */
+    padding: 8px 16px; /* Más padding horizontal para el estilo pill */
+    font-size: 0.9rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px; /* Pill shape */
+    color: #4a5568;
+    background-color: #f8fafc;
+    font-family: inherit;
+    transition: all 0.2s ease;
+    box-sizing: border-box; /* Asegurar que el padding no rompa el ancho */
+    margin-bottom: 10px !important; /* Override inline style if needed, or consistent spacing */
+    display: block; /* Asegurar que se comporten como bloque */
+}
+
+.add-user-form input[type="text"]:hover,
+.add-user-form input[type="password"]:hover,
+#new-admin-password:hover,
+#new-superadmin-password:hover {
+    border-color: #cbd5e1;
+    background-color: #fff;
+}
+
+.add-user-form input[type="text"]:focus,
+.add-user-form input[type="password"]:focus,
+#new-admin-password:focus,
+#new-superadmin-password:focus {
+    outline: none;
+    border-color: #3498db;
+    background-color: #fff;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.add-user-form #add-user-btn {
+    width: 100%;
+    max-width: 280px; /* Mismo ancho máximo que los inputs */
+    padding: 8px 16px;
+    border-radius: 20px; /* Pill shape for button too */
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    margin-top: 5px;
+    display: block; /* Asegurar bloque */
+}
