@@ -3,6 +3,11 @@ let personal = [];
 let turnos = {}
 let users = []; // Usuarios adicionales creados por Super Admin
 let currentUser = null; // sesión actual: { username, role }
+let currentSettings = null; // Cache de configuraciones
+let currentHolidays = null; // Cache de feriados
+let currentMovementLogs = null; // Cache de logs movimientos
+let currentAnnualLogs = null; // Cache de logs anuales
+let currentSystemState = null; // Cache de estado del sistema (resets, orden manual)
 let adminIdleTimer = null; // temporizador de inactividad para admin
 let adminActivityHandler = null; // handler para reiniciar temporizador
 
@@ -363,9 +368,9 @@ function closeHamburgerMenu() {
 // Enlaces de recuperación/creación removidos de la UI
 
 // Inicialización
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     loadSession(); // Load session first to determine currentUser
-    loadData();    // Then load data (which depends on currentUser)
+    await loadData();    // Then load data (which depends on currentUser)
     updateSessionUI();
     setupEventListeners();
     // Mostrar mensajes de cierre previo si aplica
@@ -740,14 +745,14 @@ function setupEventListeners() {
         closeModal(resetM);
     });
 
-    document.getElementById('confirm-reset-btn').addEventListener('click', function() {
+    document.getElementById('confirm-reset-btn').addEventListener('click', async function() {
         const resetM = document.getElementById('reset-confirmation-modal');
         closeModal(resetM);
         
         const resetSuccess = resetAnnualData('manual');
         if (resetSuccess) {
             const currentYear = new Date().getFullYear();
-            localStorage.setItem('vigilancia-last-reset-year', currentYear.toString());
+            await saveSystemState('vigilancia-last-reset-year', currentYear.toString());
             renderStats();
             loadAnnualLogs();
         }
@@ -1462,6 +1467,84 @@ function deletePersonal(id) {
     });
 }
 
+async function loadSystemStateData() {
+    let s = {};
+    let loadedFromServer = false;
+    try {
+        const response = await fetch('/api/data');
+        if (response.ok) {
+            const serverData = await response.json();
+            if (serverData['vigilancia-system-state']) {
+                s = serverData['vigilancia-system-state'];
+                loadedFromServer = true;
+            }
+        }
+    } catch (e) {
+        console.warn('Error loading system state from server:', e);
+    }
+
+    if (!loadedFromServer) {
+        // Fallback: build from individual localStorage keys if server failed or empty
+        try {
+            const keys = [
+                'vigilancia-last-reset-year',
+                'vigilancia-last-a26-estres-reset-year',
+                'vigilancia-order-sadofe',
+                'vigilancia-order-sem'
+            ];
+            keys.forEach(k => {
+                const val = localStorage.getItem(k);
+                if (val) s[k] = val;
+            });
+        } catch {}
+    }
+    
+    currentSystemState = s;
+    
+    // Sync if we have local data and server failed/empty
+    if (!loadedFromServer && Object.keys(currentSystemState).length > 0) {
+        saveSystemState();
+    }
+}
+
+function getSystemState(key) {
+    if (currentSystemState && currentSystemState[key] !== undefined) {
+        return currentSystemState[key];
+    }
+    // Fallback direct read (shouldn't be needed often)
+    return localStorage.getItem(key);
+}
+
+async function saveSystemState(key, value) {
+    if (!currentSystemState) currentSystemState = {};
+    
+    if (key && value !== undefined) {
+        currentSystemState[key] = value;
+    }
+    
+    try {
+        // Save to localStorage individually for redundancy
+        if (key && value !== undefined) {
+             localStorage.setItem(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+        } else {
+            // Save all keys in currentSystemState
+             Object.keys(currentSystemState).forEach(k => {
+                 const v = currentSystemState[k];
+                 localStorage.setItem(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+             });
+        }
+
+        // Save to server
+        await fetch('/api/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 'vigilancia-system-state': currentSystemState })
+        });
+    } catch (e) {
+        console.error('Error saving system state:', e);
+    }
+}
+
 // Funciones para el manejo del calendario
 // Utilidades para orden manual de filas
 function getManualOrderKey(modalidad) {
@@ -1470,7 +1553,18 @@ function getManualOrderKey(modalidad) {
 
 function getManualOrder(modalidad) {
     try {
-        const raw = localStorage.getItem(getManualOrderKey(modalidad));
+        const key = getManualOrderKey(modalidad);
+        // Try system state first
+        let raw = getSystemState(key);
+        // If stored as JSON string in system state or local storage
+        if (raw && typeof raw === 'string' && (raw.startsWith('[') || raw.startsWith('{'))) {
+             try { return JSON.parse(raw); } catch {}
+        }
+        // If it's already an object/array in memory
+        if (Array.isArray(raw)) return raw.map(id => String(id));
+        
+        // Final fallback if getSystemState returned null/undefined
+        raw = localStorage.getItem(key);
         const arr = raw ? JSON.parse(raw) : [];
         return Array.isArray(arr) ? arr.map(id => String(id)) : [];
     } catch {
@@ -1478,9 +1572,11 @@ function getManualOrder(modalidad) {
     }
 }
 
-function saveManualOrder(modalidad, orderIds) {
+async function saveManualOrder(modalidad, orderIds) {
     try {
-        localStorage.setItem(getManualOrderKey(modalidad), JSON.stringify(orderIds.map(id => String(id))));
+        const key = getManualOrderKey(modalidad);
+        const val = JSON.stringify(orderIds.map(id => String(id)));
+        await saveSystemState(key, val);
     } catch {}
 }
 
@@ -1536,7 +1632,97 @@ function movePersonalRow(personalId, direction, modalidad) {
     renderCalendar();
 }
 
+async function loadHolidaysData() {
+    let h = {};
+    let loadedFromServer = false;
+    try {
+        const response = await fetch('/api/data');
+        if (response.ok) {
+            const serverData = await response.json();
+            if (serverData['vigilancia-holidays']) {
+                h = serverData['vigilancia-holidays'];
+                loadedFromServer = true;
+            }
+        }
+    } catch (e) {
+        console.warn('Error loading holidays from server:', e);
+    }
+
+    if (!loadedFromServer) {
+        try {
+            const raw = localStorage.getItem('vigilancia-holidays');
+            if (raw) h = JSON.parse(raw);
+        } catch {}
+    }
+    
+    currentHolidays = h && typeof h === 'object' ? h : {};
+    
+    // Fallback sync if we have local data and server failed
+    if (!loadedFromServer && Object.keys(currentHolidays).length > 0) {
+         saveHolidayStore(currentHolidays);
+    }
+}
+
+async function loadLogsData() {
+    let m = [];
+    let a = [];
+    let loadedFromServer = false;
+    
+    try {
+        const response = await fetch('/api/data');
+        if (response.ok) {
+            const serverData = await response.json();
+            if (serverData['vigilancia-movement-logs']) {
+                m = serverData['vigilancia-movement-logs'];
+                if (!Array.isArray(m)) m = [];
+            }
+            if (serverData['vigilancia-annual-logs']) {
+                a = serverData['vigilancia-annual-logs'];
+                if (!Array.isArray(a)) a = [];
+            }
+            loadedFromServer = true;
+        }
+    } catch (e) {
+        console.warn('Error loading logs from server:', e);
+    }
+
+    if (!loadedFromServer) {
+        try {
+            const rawM = localStorage.getItem('vigilancia-movement-logs');
+            if (rawM) m = JSON.parse(rawM);
+            if (!Array.isArray(m)) m = [];
+            
+            const rawA = localStorage.getItem('vigilancia-annual-logs');
+            if (rawA) a = JSON.parse(rawA);
+            if (!Array.isArray(a)) a = [];
+        } catch {}
+    }
+    
+    currentMovementLogs = m;
+    currentAnnualLogs = a;
+    
+    // Fallback sync if we have local data and server failed
+    if (!loadedFromServer && (m.length > 0 || a.length > 0)) {
+         // Sync back (fire and forget)
+         syncLogsToServer();
+    }
+}
+
+async function syncLogsToServer() {
+    try {
+        await fetch('/api/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                'vigilancia-movement-logs': currentMovementLogs,
+                'vigilancia-annual-logs': currentAnnualLogs
+            })
+        });
+    } catch (e) { console.error('Error syncing logs:', e); }
+}
+
 function getHolidayStore() {
+    if (currentHolidays) return currentHolidays;
     try {
         const raw = localStorage.getItem('vigilancia-holidays');
         const obj = raw ? JSON.parse(raw) : {};
@@ -1546,10 +1732,18 @@ function getHolidayStore() {
     }
 }
 
-function saveHolidayStore(obj) {
+async function saveHolidayStore(obj) {
+    currentHolidays = obj || {};
     try {
-        localStorage.setItem('vigilancia-holidays', JSON.stringify(obj));
-    } catch {}
+        localStorage.setItem('vigilancia-holidays', JSON.stringify(currentHolidays));
+        await fetch('/api/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 'vigilancia-holidays': currentHolidays })
+        });
+    } catch (e) {
+        console.error('Error saving holidays:', e);
+    }
 }
 
 function getMonthKey(year, month) {
@@ -3785,34 +3979,63 @@ function removeMultiDayEvent(personalId, fechaInicio, fechaFin) {
 }
 
 // Persistencia de datos
-function saveData() {
+async function saveData() {
     try {
         const { pKey, tKey } = getDataKeys();
+        
+        // Datos a guardar
+        const dataToSave = {
+            [pKey]: personal,
+            [tKey]: turnos
+        };
 
-        // Intentar usar localStorage primero
+        // Guardar en servidor
+        try {
+            const response = await fetch('/api/data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(dataToSave)
+            });
+            
+            if (response.ok) {
+                console.log(`Datos guardados correctamente en servidor (${pKey})`);
+            } else {
+                throw new Error('Error en respuesta del servidor');
+            }
+        } catch (serverError) {
+            console.error('Error guardando en servidor:', serverError);
+            throw serverError; // Re-throw para activar el fallback
+        }
+
+        // Respaldo en localStorage (por redundancia y offline)
         if (typeof(Storage) !== "undefined") {
             localStorage.setItem(pKey, JSON.stringify(personal));
             localStorage.setItem(tKey, JSON.stringify(turnos));
-            console.log(`Datos guardados correctamente en localStorage (${pKey})`);
             // Respaldo automático versionado (throttled)
             scheduleAutoBackup();
-        } else {
-            // Fallback: usar cookies si localStorage no está disponible
-            setCookie(pKey, JSON.stringify(personal), 365);
-            setCookie(tKey, JSON.stringify(turnos), 365);
-            console.log('Datos guardados en cookies (fallback)');
         }
+
     } catch (e) {
         console.error('Error guardando datos:', e);
-        // Intentar fallback con cookies
+        
+        // Fallback: intentar localStorage si falló el servidor
         try {
             const { pKey, tKey } = getDataKeys();
-            setCookie(pKey, JSON.stringify(personal), 365);
-            setCookie(tKey, JSON.stringify(turnos), 365);
-            showNotification('Datos guardados usando cookies (modo compatibilidad)');
-        } catch (cookieError) {
-            console.error('Error guardando en cookies:', cookieError);
-            showNotification('Error: No se pudieron guardar los datos. Verifique la configuración del navegador.');
+            if (typeof(Storage) !== "undefined") {
+                localStorage.setItem(pKey, JSON.stringify(personal));
+                localStorage.setItem(tKey, JSON.stringify(turnos));
+                console.log('Datos guardados en localStorage (fallback)');
+            } else {
+                 // Último recurso: cookies
+                setCookie(pKey, JSON.stringify(personal), 365);
+                setCookie(tKey, JSON.stringify(turnos), 365);
+                console.log('Datos guardados en cookies (fallback extremo)');
+            }
+        } catch (fallbackError) {
+            console.error('Error en fallback de guardado:', fallbackError);
+            showNotification('Error: No se pudieron guardar los datos. Verifique su conexión.');
         }
     }
 }
@@ -3891,7 +4114,7 @@ function calculateAnnualStats(year) {
 }
 
 // Función para guardar log anual
-function saveAnnualLog(year, stats) {
+async function saveAnnualLog(year, stats) {
     try {
         const logData = {
             year: year,
@@ -3901,13 +4124,9 @@ function saveAnnualLog(year, stats) {
         };
         
         // Obtener logs existentes
-        let annualLogs = [];
-        if (typeof(Storage) !== "undefined") {
-            const savedLogs = localStorage.getItem('vigilancia-annual-logs');
-            if (savedLogs) {
-                annualLogs = JSON.parse(savedLogs);
-            }
-        }
+        let annualLogs = getAnnualLogs();
+        // Asegurar que sea un array
+        if (!Array.isArray(annualLogs)) annualLogs = [];
         
         // Verificar si ya existe un log para este año
         const existingLogIndex = annualLogs.findIndex(log => log.year === year);
@@ -3922,10 +4141,16 @@ function saveAnnualLog(year, stats) {
         // Mantener solo los últimos 10 años de logs
         annualLogs = annualLogs.sort((a, b) => b.year - a.year).slice(0, 10);
         
+        // Actualizar global
+        currentAnnualLogs = annualLogs;
+        
         // Guardar logs actualizados
         if (typeof(Storage) !== "undefined") {
             localStorage.setItem('vigilancia-annual-logs', JSON.stringify(annualLogs));
         }
+        
+        // Sync server
+        syncLogsToServer();
         
         console.log(`Log anual guardado para el año ${year}`);
         return true;
@@ -4038,32 +4263,32 @@ function resetAnnualTypes(types = ['articulo26', 'estres']) {
 }
 
 // Función para verificar si es necesario hacer reset anual
-function checkAnnualReset() {
+async function checkAnnualReset() {
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     
     // Verificar si es 1 de enero
     if (currentDate.getMonth() === 0 && currentDate.getDate() === 1) {
         // Verificar si ya se hizo el reset este año
-        const lastResetYear = localStorage.getItem('vigilancia-last-reset-year');
+        const lastResetYear = getSystemState('vigilancia-last-reset-year');
         
         if (!lastResetYear || parseInt(lastResetYear) < currentYear) {
             // Mostrar confirmación al usuario
             if (confirm(`¡Es 1 de enero de ${currentYear}!\n\n¿Desea archivar las estadísticas del año ${currentYear - 1} y reiniciar el sistema para el nuevo año?\n\nEsto guardará todas las estadísticas del año anterior en los logs y limpiará los datos para comenzar el nuevo año.`)) {
                 const resetSuccess = resetAnnualData('automatic');
                 if (resetSuccess) {
-                    localStorage.setItem('vigilancia-last-reset-year', currentYear.toString());
+                    await saveSystemState('vigilancia-last-reset-year', currentYear.toString());
                 }
             }
         }
 
         // Renovación específica de Artículo 26 y Estrés (evitar repetir en el mismo año)
-        const lastTypesResetYear = localStorage.getItem('vigilancia-last-a26-estres-reset-year');
+        const lastTypesResetYear = getSystemState('vigilancia-last-a26-estres-reset-year');
         if (!lastTypesResetYear || parseInt(lastTypesResetYear) < currentYear) {
             if (confirm(`¿Desea renovar Artículo 26 y Estrés del año ${currentYear - 1}?\n\nSe conservarán el resto de los turnos y todo lo cargado para ${currentYear} y años siguientes.`)) {
                 const typesResetSuccess = resetAnnualTypes(['articulo26', 'estres']);
                 if (typesResetSuccess) {
-                    localStorage.setItem('vigilancia-last-a26-estres-reset-year', currentYear.toString());
+                    await saveSystemState('vigilancia-last-a26-estres-reset-year', currentYear.toString());
                 }
             }
         }
@@ -4072,6 +4297,7 @@ function checkAnnualReset() {
 
 // Función para obtener logs anuales
 function getAnnualLogs() {
+    if (currentAnnualLogs) return currentAnnualLogs;
     try {
         if (typeof(Storage) !== "undefined") {
             const savedLogs = localStorage.getItem('vigilancia-annual-logs');
@@ -4207,6 +4433,7 @@ function loadAnnualLogs() {
 
 // Logs de movimientos
 function getMovementLogs() {
+    if (currentMovementLogs) return currentMovementLogs;
     try {
         if (typeof(Storage) !== "undefined") {
             const saved = localStorage.getItem('vigilancia-movement-logs');
@@ -4218,15 +4445,21 @@ function getMovementLogs() {
     return [];
 }
 
-function addMovementLog(entry) {
+async function addMovementLog(entry) {
     try {
         const logs = getMovementLogs();
         logs.unshift(entry);
         // Limitar tamaño a últimos 300 movimientos
         const trimmed = logs.slice(0, 300);
+        
+        currentMovementLogs = trimmed;
+        
         if (typeof(Storage) !== "undefined") {
             localStorage.setItem('vigilancia-movement-logs', JSON.stringify(trimmed));
         }
+        
+        // Server sync
+        syncLogsToServer(); // Fire and forget
     } catch (e) {
         console.error('Error guardando movement log:', e);
     }
@@ -4540,26 +4773,59 @@ function renderMovementLogDetailsHTML(log) {
     return '<p>Sin detalles</p>';
 }
 
-function loadUsers() {
+async function loadUsers() {
+    users = [];
+    let loadedFromServer = false;
     try {
-        if (typeof(Storage) !== "undefined") {
-            const saved = localStorage.getItem('vigilancia-users');
-            if (saved) {
-                users = JSON.parse(saved);
+        // 1. Intentar cargar desde el servidor
+        const response = await fetch('/api/data');
+        if (response.ok) {
+            const serverData = await response.json();
+            if (serverData['vigilancia-users']) {
+                users = serverData['vigilancia-users'];
                 if (!Array.isArray(users)) users = [];
+                loadedFromServer = true;
             }
         }
     } catch (e) {
-        console.error('Error cargando usuarios:', e);
-        users = [];
+        console.warn('Error loading users from server:', e);
+    }
+
+    // 2. Fallback / Merge from LocalStorage
+    if (!loadedFromServer) {
+        try {
+            if (typeof(Storage) !== "undefined") {
+                const saved = localStorage.getItem('vigilancia-users');
+                if (saved) {
+                    users = JSON.parse(saved);
+                    if (!Array.isArray(users)) users = [];
+                }
+            }
+        } catch (e) {
+            console.error('Error cargando usuarios local:', e);
+            users = [];
+        }
+        
+        // Si hay usuarios locales y falló el servidor, intentamos sincronizar hacia arriba
+        if (users.length > 0) {
+             saveUsers(); 
+        }
     }
 }
 
-function saveUsers() {
+async function saveUsers() {
     try {
+        // Local save
         if (typeof(Storage) !== "undefined") {
             localStorage.setItem('vigilancia-users', JSON.stringify(users));
         }
+        
+        // Server save
+        await fetch('/api/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 'vigilancia-users': users })
+        });
     } catch (e) {
         console.error('Error guardando usuarios:', e);
     }
@@ -4577,70 +4843,107 @@ function getDataKeys() {
     return { pKey, tKey };
 }
 
-function loadData() {
-    loadUsers(); // Asegurar que users estén cargados
+async function loadData() {
+    await loadUsers(); // Asegurar que users estén cargados
+    await loadSettingsData(); // Cargar configuraciones
+    await loadHolidaysData(); // Cargar feriados
+    await loadLogsData(); // Cargar logs
+    await loadSystemStateData(); // Cargar estado del sistema
     
     try {
-        let savedPersonal, savedTurnos;
         const { pKey, tKey } = getDataKeys();
-        
-        // Intentar cargar desde localStorage primero
-        if (typeof(Storage) !== "undefined") {
-            savedPersonal = localStorage.getItem(pKey);
-            savedTurnos = localStorage.getItem(tKey);
+        let loadedFromServer = false;
+
+        // 1. Intentar cargar desde el servidor
+        try {
+            const response = await fetch('/api/data');
+            if (response.ok) {
+                const serverData = await response.json();
+                
+                if (serverData[pKey]) {
+                    personal = serverData[pKey];
+                    loadedFromServer = true;
+                }
+                
+                if (serverData[tKey]) {
+                    turnos = serverData[tKey];
+                    // Si encontramos turnos, consideramos que cargamos del servidor
+                    loadedFromServer = true;
+                }
+            }
+        } catch (serverError) {
+            console.warn('No se pudo cargar del servidor, intentando local:', serverError);
         }
-        
-        // Si no hay datos en localStorage, intentar cookies
-        if (!savedPersonal || !savedTurnos) {
-            savedPersonal = savedPersonal || getCookie(pKey);
-            savedTurnos = savedTurnos || getCookie(tKey);
-        }
-        
-        if (savedPersonal) {
-            try {
-                personal = JSON.parse(savedPersonal);
-                if (!Array.isArray(personal)) {
+
+        // 2. Si no se cargó del servidor, intentar localStorage/cookies (Fallback y Migración)
+        if (!loadedFromServer) {
+            let savedPersonalStr, savedTurnosStr;
+            
+            // Intentar cargar desde localStorage primero
+            if (typeof(Storage) !== "undefined") {
+                savedPersonalStr = localStorage.getItem(pKey);
+                savedTurnosStr = localStorage.getItem(tKey);
+            }
+            
+            // Si no hay datos en localStorage, intentar cookies
+            if (!savedPersonalStr || !savedTurnosStr) {
+                savedPersonalStr = savedPersonalStr || getCookie(pKey);
+                savedTurnosStr = savedTurnosStr || getCookie(tKey);
+            }
+            
+            if (savedPersonalStr) {
+                try {
+                    personal = JSON.parse(savedPersonalStr);
+                } catch (e) {
+                    console.error('Error parsing personal data:', e);
                     personal = [];
                 }
-            } catch (e) {
-                console.error('Error parsing personal data:', e);
-                personal = [];
             }
-        } else {
+            
+            if (savedTurnosStr) {
+                try {
+                    turnos = JSON.parse(savedTurnosStr);
+                } catch (e) {
+                    console.error('Error parsing turnos data:', e);
+                    turnos = {};
+                }
+            }
+
+            // Migración: Si tenemos datos locales y no falló explícitamente el servidor (simplemente estaba vacío), guardamos.
+            // Nota: Si el servidor falló (catch arriba), saveData también fallará probablemente, pero lo intentamos.
+            if (savedPersonalStr || savedTurnosStr) {
+                console.log('Migrando datos locales al servidor...');
+                saveData(); 
+            }
+        }
+        
+        // 3. Normalización y validación
+        if (!Array.isArray(personal)) {
             personal = [];
         }
         
-        if (savedTurnos) {
-            try {
-                turnos = JSON.parse(savedTurnos);
-                // turnos debe ser un objeto, no un array
-                if (typeof turnos !== 'object' || turnos === null || Array.isArray(turnos)) {
-                    turnos = {};
-                }
-                // Normalizar tipos antiguos
-                try {
-                    Object.keys(turnos).forEach(f => {
-                        const per = turnos[f];
-                        Object.keys(per || {}).forEach(pid => {
-                            const t = per[pid];
-                            if (t && t.tipo === 'carretera') {
-                                t.tipo = 'carpeta_medica';
-                                per[pid] = t;
-                            }
-                        });
-                    });
-                } catch {}
-            } catch (e) {
-                console.error('Error parsing turnos data:', e);
-                turnos = {};
-            }
-        } else {
+        // turnos debe ser un objeto, no un array
+        if (typeof turnos !== 'object' || turnos === null || Array.isArray(turnos)) {
             turnos = {};
         }
         
+        // Normalizar tipos antiguos
+        try {
+            Object.keys(turnos).forEach(f => {
+                const per = turnos[f];
+                Object.keys(per || {}).forEach(pid => {
+                    const t = per[pid];
+                    if (t && t.tipo === 'carretera') {
+                        t.tipo = 'carpeta_medica';
+                        per[pid] = t;
+                    }
+                });
+            });
+        } catch {}
+        
         console.log(`Datos cargados (${pKey}):`, { personal: personal.length, turnos: Object.keys(turnos).length });
     } catch (e) {
-        console.error('Error accediendo a almacenamiento:', e);
+        console.error('Error general en loadData:', e);
         showNotification('Advertencia: No se pudieron cargar los datos guardados.');
     }
 }
@@ -4900,7 +5203,39 @@ function applyCustomStyleIfAny(el, tipo) {
     }
 }
 
+async function loadSettingsData() {
+    let s = {};
+    let loadedFromServer = false;
+    try {
+        const response = await fetch('/api/data');
+        if (response.ok) {
+            const serverData = await response.json();
+            if (serverData['vigilancia-settings']) {
+                s = serverData['vigilancia-settings'];
+                loadedFromServer = true;
+            }
+        }
+    } catch (e) {
+        console.warn('Error loading settings from server:', e);
+    }
+
+    if (!loadedFromServer) {
+        try {
+            const raw = localStorage.getItem('vigilancia-settings');
+            if (raw) s = JSON.parse(raw);
+        } catch {}
+    }
+    
+    currentSettings = s && typeof s === 'object' ? s : {};
+    
+    // Fallback sync if we have local data and server failed (or empty)
+    if (!loadedFromServer && Object.keys(currentSettings).length > 0) {
+         saveSettings(currentSettings);
+    }
+}
+
 function getSettings() {
+    if (currentSettings) return currentSettings;
     try {
         const raw = localStorage.getItem('vigilancia-settings');
         const s = raw ? JSON.parse(raw) : {};
@@ -4908,8 +5243,18 @@ function getSettings() {
     } catch { return {}; }
 }
 
-function saveSettings(s) {
-    try { localStorage.setItem('vigilancia-settings', JSON.stringify(s || {})); } catch {}
+async function saveSettings(s) {
+    currentSettings = s || {};
+    try { 
+        localStorage.setItem('vigilancia-settings', JSON.stringify(currentSettings)); 
+        await fetch('/api/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 'vigilancia-settings': currentSettings })
+        });
+    } catch (e) {
+        console.error('Error saving settings:', e);
+    }
 }
 
 function getCodigoForTipo(tipo) {

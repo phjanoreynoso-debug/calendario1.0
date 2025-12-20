@@ -1,0 +1,13 @@
+{
+  "name": "sistema-de-guardias",
+  "version": "1.0.0",
+  "description": "Sistema de gestión de guardias para UPA 16",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {}
+}
