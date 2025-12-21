@@ -27,8 +27,8 @@
 }
 
 /* Custom Types List Desktop Defaults */
-.custom-types-list .header,
-.custom-types-list .custom-type-row {
+.custom-types-list .ct-list-header,
+.custom-types-list .ct-summary-row {
     display: grid;
     grid-template-columns: 2fr 1fr 100px;
     gap: 10px;
@@ -36,9 +36,15 @@
     padding: 10px;
     border-bottom: 1px solid #eee;
 }
-.custom-types-list .header {
+.custom-types-list .ct-list-header {
     font-weight: bold;
     background: #f9f9f9;
+    border-radius: 6px 6px 0 0;
+}
+.custom-types-list .ct-summary-actions {
+    text-align: right;
+    display: flex;
+    justify-content: flex-end;
 }
 
 /* Utility class for text acting as labels */
