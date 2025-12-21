@@ -1,0 +1,250 @@
+
+/* Global Scrollbar Styles */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #f1f1f1; 
+}
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #c1c1c1 #f1f1f1;
+}
+
+/* Modern Form */
+.modern-form {
+    padding: 24px;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+/* Custom Types List Desktop Defaults */
+.custom-types-list .header,
+.custom-types-list .custom-type-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 100px;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+}
+.custom-types-list .header {
+    font-weight: bold;
+    background: #f9f9f9;
+}
+
+/* Utility class for text acting as labels */
+.label-text {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #2c3e50;
+}
+
+/* --- Mobile Optimization (Responsive Design) --- */
+
+@media screen and (max-width: 768px) {
+    /* Layout Adjustments */
+    body {
+        font-size: 14px; /* Slightly smaller base font */
+    }
+
+    .header-inner {
+        flex-direction: column;
+        gap: 1rem;
+        padding: 10px;
+    }
+
+    .logo-wrapper img, .logo-wrapper svg {
+        max-width: 100%;
+        height: auto;
+        max-height: 80px; /* Limit height on mobile */
+    }
+
+    /* Controls Section */
+    .controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+        padding: 10px;
+    }
+
+    .calendar-controls {
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        gap: 12px;
+    }
+
+    .calendar-controls > div {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        width: 100%;
+        gap: 8px;
+    }
+    
+    /* Calendar Table Mobile */
+    .calendar-container {
+        height: calc(100vh - 220px); /* Maximize space */
+        border: none;
+        border-radius: 0;
+    }
+    
+    #calendar-table th, #calendar-table td {
+        min-width: 35px; /* Slightly smaller cells */
+        padding: 6px 2px;
+        font-size: 0.75rem;
+    }
+
+    /* Personal Table - Horizontal Scroll wrapper */
+    .personal-list-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    /* Form Adjustments */
+    .form-row {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .modern-form {
+        padding: 16px;
+    }
+    
+    /* Modals - Full width and optimized margins */
+    .modal-content, 
+    .modern-modal-content,
+    #personal-section .modal-content,
+    #stats-section .modal-content,
+    #movement-log-modal .modal-content {
+        width: 95% !important;
+        margin: 10px auto;
+        max-height: 95vh;
+        border-radius: 8px;
+    }
+    
+    /* Touch Targets Optimization */
+    button, 
+    select, 
+    input[type="text"], 
+    input[type="date"],
+    input[type="time"],
+    input[type="number"],
+    input[type="password"] {
+        min-height: 44px; /* Apple Human Interface Guidelines */
+    }
+    
+    /* Adjust specific buttons for touch */
+    .btn-modern-primary, 
+    .btn-primary, 
+    .btn-secondary, 
+    .btn-danger,
+    .btn-ghost {
+        padding: 12px 20px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    /* Stack form actions on mobile for easier access */
+    .form-actions {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .form-actions button {
+        width: 100%;
+        margin-left: 0 !important;
+    }
+
+    /* Modal Specific Adjustments */
+    #turno-modal .horario-inputs {
+        flex-direction: column;
+    }
+    
+    .modal-header {
+        padding: 12px 16px;
+    }
+
+    .modal-header h2, .modal-header h3 {
+        font-size: 1.1rem;
+    }
+    
+    /* Stats Table Mobile */
+    #stats-table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    /* Workdays chips - ensure they wrap and are tappable */
+    .workdays.chips {
+        justify-content: center;
+        gap: 8px;
+    }
+    
+    .day-chip {
+        padding: 10px 14px; /* Larger touch target */
+        margin: 0;
+    }
+
+    /* Custom Type Settings Grid - Single Column */
+    #settings-modal .custom-types-list .header,
+    #settings-modal .custom-types-list .custom-type-row {
+        grid-template-columns: 1fr; /* Stack everything */
+        grid-template-rows: auto;
+        height: auto;
+        border-bottom: 2px solid #e2e8f0;
+        padding: 12px 0;
+    }
+
+    /* Hide header labels in grid if stacked, or adjust them */
+    #settings-modal .custom-types-list .header {
+        display: none; /* Hide header on mobile, use labels in rows if needed, or just context */
+    }
+
+    /* Re-layout custom type row items */
+    #settings-modal .custom-types-list .custom-type-row > * {
+        grid-column: 1 !important;
+        grid-row: auto !important;
+        justify-self: start !important;
+        width: 100%;
+    }
+
+    #settings-modal .custom-types-list .custom-type-row input {
+        width: 100%;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    /* Extra Small Devices */
+    
+    /* Reduce padding further */
+    .modal-content {
+        padding: 0;
+    }
+    
+    .modern-form {
+        padding: 12px;
+    }
+
+    /* Calendar Controls - Stack tightly */
+    .calendar-controls {
+        gap: 8px;
+    }
+
+    #current-month {
+        font-size: 1rem;
+    }
+}

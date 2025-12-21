@@ -3,11 +3,6 @@ let personal = [];
 let turnos = {}
 let users = []; // Usuarios adicionales creados por Super Admin
 let currentUser = null; // sesión actual: { username, role }
-let currentSettings = null; // Cache de configuraciones
-let currentHolidays = null; // Cache de feriados
-let currentMovementLogs = null; // Cache de logs movimientos
-let currentAnnualLogs = null; // Cache de logs anuales
-let currentSystemState = null; // Cache de estado del sistema (resets, orden manual)
 let adminIdleTimer = null; // temporizador de inactividad para admin
 let adminActivityHandler = null; // handler para reiniciar temporizador
 
@@ -58,8 +53,10 @@ function handleTipoTurnoChange() {
         horarioGroup.style.display = 'none';
     } else if (isCustom) {
         horarioGroup.style.display = cfg && cfg.requireTime ? 'block' : 'none';
+        if (horarioGroup.style.display === 'block') updateHorasContador();
     } else {
         horarioGroup.style.display = 'block';
+        updateHorasContador();
     }
     
     switch(tipoTurno) {
@@ -70,6 +67,7 @@ function handleTipoTurnoChange() {
             break;
         case 'carpeta_medica':
             document.getElementById('campos-carpeta-medica').style.display = 'block';
+            updateCarpetaDiasContador();
             break;
         case 'compensatorio':
             document.getElementById('campos-compensatorio').style.display = 'block';
@@ -114,6 +112,75 @@ function updateVacacionesDiasContador() {
         }
     }
     contadorEl.textContent = `Días seleccionados: ${days}`;
+}
+
+// Contador de días para Carpeta Médica
+function updateCarpetaDiasContador() {
+    const contadorEl = document.getElementById('carpeta-dias-contador');
+    if (!contadorEl) return;
+    
+    const startStr = document.getElementById('fecha-inicio-carpeta').value;
+    const endStr = document.getElementById('fecha-alta').value;
+    
+    if (!startStr || !endStr) {
+        contadorEl.textContent = 'Cantidad de días: 0';
+        return;
+    }
+
+    const s = parseDateLocal(startStr);
+    const e = parseDateLocal(endStr);
+    
+    if (s && e && s <= e) {
+        let days = 0;
+        const cur = new Date(s);
+        while (cur <= e) {
+            days++;
+            cur.setDate(cur.getDate() + 1);
+        }
+        contadorEl.textContent = `Cantidad de días: ${days}`;
+    } else {
+         contadorEl.textContent = 'Cantidad de días: 0';
+    }
+}
+
+// Calculadora de horas
+function updateHorasContador() {
+    const contadorEl = document.getElementById('cantidad-horaria-display');
+    if (!contadorEl) return;
+    
+    const startStr = document.getElementById('hora-entrada').value;
+    const endStr = document.getElementById('hora-salida').value;
+    
+    if (!startStr || !endStr) {
+        contadorEl.textContent = '0 hs';
+        return;
+    }
+    
+    const [startH, startM] = startStr.split(':').map(Number);
+    const [endH, endM] = endStr.split(':').map(Number);
+    
+    if (isNaN(startH) || isNaN(startM) || isNaN(endH) || isNaN(endM)) {
+         contadorEl.textContent = '0 hs';
+         return;
+    }
+
+    let startMin = startH * 60 + startM;
+    let endMin = endH * 60 + endM;
+    
+    if (endMin < startMin) {
+        endMin += 24 * 60;
+    }
+    
+    const diffMin = endMin - startMin;
+    const diffH = Math.floor(diffMin / 60);
+    const diffMRemaining = diffMin % 60;
+    
+    let text = `${diffH} hs`;
+    if (diffMRemaining > 0) {
+        text += ` ${diffMRemaining} min`;
+    }
+    
+    contadorEl.textContent = text;
 }
 
 // Parseo seguro de fecha en formato 'YYYY-MM-DD' usando tiempo local (evita desfasaje por zona horaria)
@@ -246,6 +313,7 @@ function loadConditionalFieldsData(turno) {
         case 'carpeta_medica':
             if (turno.fechaInicioCarpeta) document.getElementById('fecha-inicio-carpeta').value = turno.fechaInicioCarpeta;
             if (turno.fechaAlta) document.getElementById('fecha-alta').value = turno.fechaAlta;
+            updateCarpetaDiasContador();
             break;
         case 'compensatorio':
             if (turno.fechaTrabajoRealizado) document.getElementById('fecha-trabajo-realizado').value = turno.fechaTrabajoRealizado;
@@ -368,9 +436,9 @@ function closeHamburgerMenu() {
 // Enlaces de recuperación/creación removidos de la UI
 
 // Inicialización
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', () => {
     loadSession(); // Load session first to determine currentUser
-    await loadData();    // Then load data (which depends on currentUser)
+    loadData();    // Then load data (which depends on currentUser)
     updateSessionUI();
     setupEventListeners();
     // Mostrar mensajes de cierre previo si aplica
@@ -507,6 +575,17 @@ function setupEventListeners() {
     const fechaFinInput = document.getElementById('fecha-fin');
     if (fechaInicioInput) fechaInicioInput.addEventListener('change', updateVacacionesDiasContador);
     if (fechaFinInput) fechaFinInput.addEventListener('change', updateVacacionesDiasContador);
+
+    // Contadores para Carpeta Médica y Horarios
+    const fechaInicioCarpetaInput = document.getElementById('fecha-inicio-carpeta');
+    const fechaAltaInput = document.getElementById('fecha-alta');
+    if (fechaInicioCarpetaInput) fechaInicioCarpetaInput.addEventListener('change', updateCarpetaDiasContador);
+    if (fechaAltaInput) fechaAltaInput.addEventListener('change', updateCarpetaDiasContador);
+
+    const horaEntradaInput = document.getElementById('hora-entrada');
+    const horaSalidaInput = document.getElementById('hora-salida');
+    if (horaEntradaInput) horaEntradaInput.addEventListener('change', updateHorasContador);
+    if (horaSalidaInput) horaSalidaInput.addEventListener('change', updateHorasContador);
 
     // Autofocus entre pares de fechas (Inicio → Fin/Alta)
     const bindAutoFocusDate = (fromEl, toEl) => {
@@ -745,14 +824,14 @@ function setupEventListeners() {
         closeModal(resetM);
     });
 
-    document.getElementById('confirm-reset-btn').addEventListener('click', async function() {
+    document.getElementById('confirm-reset-btn').addEventListener('click', function() {
         const resetM = document.getElementById('reset-confirmation-modal');
         closeModal(resetM);
         
         const resetSuccess = resetAnnualData('manual');
         if (resetSuccess) {
             const currentYear = new Date().getFullYear();
-            await saveSystemState('vigilancia-last-reset-year', currentYear.toString());
+            localStorage.setItem('vigilancia-last-reset-year', currentYear.toString());
             renderStats();
             loadAnnualLogs();
         }
@@ -797,7 +876,10 @@ function setupEventListeners() {
     // Exportación / Importación de datos
     if (exportDataBtn) {
         exportDataBtn.addEventListener('click', () => {
-            exportAllData();
+            showNotification('Iniciando exportación de datos...');
+            setTimeout(() => {
+                exportAllData();
+            }, 50);
         });
     }
     if (importDataBtn && importFileInput) {
@@ -814,7 +896,11 @@ function setupEventListeners() {
     // Exportar calendario a PDF
     if (downloadPdfBtn) {
         downloadPdfBtn.addEventListener('click', () => {
-            exportCalendarToPDF();
+            // Usar setTimeout para evitar bloquear el hilo principal durante el evento click
+            showNotification('Iniciando exportación...');
+            setTimeout(() => {
+                exportCalendarToPDF();
+            }, 50);
         });
     }
 
@@ -1171,28 +1257,26 @@ function renderPersonalList() {
                 <div class="ve-stats">
                     <div class="ve-item">
                         <span class="ve-label">V:</span>
-                        <span class="ve-value">${vacUsados == null ? '-' : `${vacUsados} tomados`}</span>
-                        <span class="ve-sep">·</span>
-                        <span class="ve-remain">${vacResto == null ? '-' : `${vacResto} a favor`}</span>
+                        <span class="ve-value" style="margin-right: 4px;">${vacUsados == null ? '-' : `${vacUsados} tomados`}</span>
+                        <span class="ve-remain">${vacResto == null ? '-' : ` · ${vacResto} a favor`}</span>
                     </div>
                     <div class="ve-item">
                         <span class="ve-label">E:</span>
-                        <span class="ve-value">${estUsados == null ? '-' : `${estUsados} tomados`}</span>
-                        <span class="ve-sep">·</span>
-                        <span class="ve-remain">${estResto == null ? '-' : `${estResto} a favor`}</span>
+                        <span class="ve-value" style="margin-right: 4px;">${estUsados == null ? '-' : `${estUsados} tomados`}</span>
+                        <span class="ve-remain">${estResto == null ? '-' : ` · ${estResto} a favor`}</span>
                     </div>
                 </div>
             </td>
-            <td class="action-buttons">
-                <div class="action-buttons-inner">
-                    <div class="order-controls" style="display: flex; flex-direction: column; margin-right: 8px;">
-                        <button class="order-btn up-btn" title="Subir" ${!canUp ? 'disabled' : ''} style="padding: 0; line-height: 1; font-size: 10px; height: 16px; width: 24px; margin-bottom: 2px; cursor: pointer;">▲</button>
-                        <button class="order-btn down-btn" title="Bajar" ${!canDown ? 'disabled' : ''} style="padding: 0; line-height: 1; font-size: 10px; height: 16px; width: 24px; cursor: pointer;">▼</button>
+            <td class="actions-cell">
+                <div class="actions-cell-content">
+                    <div class="order-controls">
+                        <button class="order-btn up-btn" title="Subir" ${!canUp ? 'disabled' : ''}>▲</button>
+                        <button class="order-btn down-btn" title="Bajar" ${!canDown ? 'disabled' : ''}>▼</button>
                     </div>
-                    <button class="btn-secondary edit-btn" data-id="${persona.id}">
+                    <button class="btn-secondary edit-btn" data-id="${persona.id}" title="Editar">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button class="btn-danger delete-btn" data-id="${persona.id}">
+                    <button class="btn-danger delete-btn" data-id="${persona.id}" title="Eliminar">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -1467,84 +1551,6 @@ function deletePersonal(id) {
     });
 }
 
-async function loadSystemStateData() {
-    let s = {};
-    let loadedFromServer = false;
-    try {
-        const response = await fetch('/api/data');
-        if (response.ok) {
-            const serverData = await response.json();
-            if (serverData['vigilancia-system-state']) {
-                s = serverData['vigilancia-system-state'];
-                loadedFromServer = true;
-            }
-        }
-    } catch (e) {
-        console.warn('Error loading system state from server:', e);
-    }
-
-    if (!loadedFromServer) {
-        // Fallback: build from individual localStorage keys if server failed or empty
-        try {
-            const keys = [
-                'vigilancia-last-reset-year',
-                'vigilancia-last-a26-estres-reset-year',
-                'vigilancia-order-sadofe',
-                'vigilancia-order-sem'
-            ];
-            keys.forEach(k => {
-                const val = localStorage.getItem(k);
-                if (val) s[k] = val;
-            });
-        } catch {}
-    }
-    
-    currentSystemState = s;
-    
-    // Sync if we have local data and server failed/empty
-    if (!loadedFromServer && Object.keys(currentSystemState).length > 0) {
-        saveSystemState();
-    }
-}
-
-function getSystemState(key) {
-    if (currentSystemState && currentSystemState[key] !== undefined) {
-        return currentSystemState[key];
-    }
-    // Fallback direct read (shouldn't be needed often)
-    return localStorage.getItem(key);
-}
-
-async function saveSystemState(key, value) {
-    if (!currentSystemState) currentSystemState = {};
-    
-    if (key && value !== undefined) {
-        currentSystemState[key] = value;
-    }
-    
-    try {
-        // Save to localStorage individually for redundancy
-        if (key && value !== undefined) {
-             localStorage.setItem(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
-        } else {
-            // Save all keys in currentSystemState
-             Object.keys(currentSystemState).forEach(k => {
-                 const v = currentSystemState[k];
-                 localStorage.setItem(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
-             });
-        }
-
-        // Save to server
-        await fetch('/api/data', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 'vigilancia-system-state': currentSystemState })
-        });
-    } catch (e) {
-        console.error('Error saving system state:', e);
-    }
-}
-
 // Funciones para el manejo del calendario
 // Utilidades para orden manual de filas
 function getManualOrderKey(modalidad) {
@@ -1553,18 +1559,7 @@ function getManualOrderKey(modalidad) {
 
 function getManualOrder(modalidad) {
     try {
-        const key = getManualOrderKey(modalidad);
-        // Try system state first
-        let raw = getSystemState(key);
-        // If stored as JSON string in system state or local storage
-        if (raw && typeof raw === 'string' && (raw.startsWith('[') || raw.startsWith('{'))) {
-             try { return JSON.parse(raw); } catch {}
-        }
-        // If it's already an object/array in memory
-        if (Array.isArray(raw)) return raw.map(id => String(id));
-        
-        // Final fallback if getSystemState returned null/undefined
-        raw = localStorage.getItem(key);
+        const raw = localStorage.getItem(getManualOrderKey(modalidad));
         const arr = raw ? JSON.parse(raw) : [];
         return Array.isArray(arr) ? arr.map(id => String(id)) : [];
     } catch {
@@ -1572,11 +1567,9 @@ function getManualOrder(modalidad) {
     }
 }
 
-async function saveManualOrder(modalidad, orderIds) {
+function saveManualOrder(modalidad, orderIds) {
     try {
-        const key = getManualOrderKey(modalidad);
-        const val = JSON.stringify(orderIds.map(id => String(id)));
-        await saveSystemState(key, val);
+        localStorage.setItem(getManualOrderKey(modalidad), JSON.stringify(orderIds.map(id => String(id))));
     } catch {}
 }
 
@@ -1632,97 +1625,7 @@ function movePersonalRow(personalId, direction, modalidad) {
     renderCalendar();
 }
 
-async function loadHolidaysData() {
-    let h = {};
-    let loadedFromServer = false;
-    try {
-        const response = await fetch('/api/data');
-        if (response.ok) {
-            const serverData = await response.json();
-            if (serverData['vigilancia-holidays']) {
-                h = serverData['vigilancia-holidays'];
-                loadedFromServer = true;
-            }
-        }
-    } catch (e) {
-        console.warn('Error loading holidays from server:', e);
-    }
-
-    if (!loadedFromServer) {
-        try {
-            const raw = localStorage.getItem('vigilancia-holidays');
-            if (raw) h = JSON.parse(raw);
-        } catch {}
-    }
-    
-    currentHolidays = h && typeof h === 'object' ? h : {};
-    
-    // Fallback sync if we have local data and server failed
-    if (!loadedFromServer && Object.keys(currentHolidays).length > 0) {
-         saveHolidayStore(currentHolidays);
-    }
-}
-
-async function loadLogsData() {
-    let m = [];
-    let a = [];
-    let loadedFromServer = false;
-    
-    try {
-        const response = await fetch('/api/data');
-        if (response.ok) {
-            const serverData = await response.json();
-            if (serverData['vigilancia-movement-logs']) {
-                m = serverData['vigilancia-movement-logs'];
-                if (!Array.isArray(m)) m = [];
-            }
-            if (serverData['vigilancia-annual-logs']) {
-                a = serverData['vigilancia-annual-logs'];
-                if (!Array.isArray(a)) a = [];
-            }
-            loadedFromServer = true;
-        }
-    } catch (e) {
-        console.warn('Error loading logs from server:', e);
-    }
-
-    if (!loadedFromServer) {
-        try {
-            const rawM = localStorage.getItem('vigilancia-movement-logs');
-            if (rawM) m = JSON.parse(rawM);
-            if (!Array.isArray(m)) m = [];
-            
-            const rawA = localStorage.getItem('vigilancia-annual-logs');
-            if (rawA) a = JSON.parse(rawA);
-            if (!Array.isArray(a)) a = [];
-        } catch {}
-    }
-    
-    currentMovementLogs = m;
-    currentAnnualLogs = a;
-    
-    // Fallback sync if we have local data and server failed
-    if (!loadedFromServer && (m.length > 0 || a.length > 0)) {
-         // Sync back (fire and forget)
-         syncLogsToServer();
-    }
-}
-
-async function syncLogsToServer() {
-    try {
-        await fetch('/api/data', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                'vigilancia-movement-logs': currentMovementLogs,
-                'vigilancia-annual-logs': currentAnnualLogs
-            })
-        });
-    } catch (e) { console.error('Error syncing logs:', e); }
-}
-
 function getHolidayStore() {
-    if (currentHolidays) return currentHolidays;
     try {
         const raw = localStorage.getItem('vigilancia-holidays');
         const obj = raw ? JSON.parse(raw) : {};
@@ -1732,18 +1635,10 @@ function getHolidayStore() {
     }
 }
 
-async function saveHolidayStore(obj) {
-    currentHolidays = obj || {};
+function saveHolidayStore(obj) {
     try {
-        localStorage.setItem('vigilancia-holidays', JSON.stringify(currentHolidays));
-        await fetch('/api/data', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 'vigilancia-holidays': currentHolidays })
-        });
-    } catch (e) {
-        console.error('Error saving holidays:', e);
-    }
+        localStorage.setItem('vigilancia-holidays', JSON.stringify(obj));
+    } catch {}
 }
 
 function getMonthKey(year, month) {
@@ -3979,63 +3874,34 @@ function removeMultiDayEvent(personalId, fechaInicio, fechaFin) {
 }
 
 // Persistencia de datos
-async function saveData() {
+function saveData() {
     try {
         const { pKey, tKey } = getDataKeys();
-        
-        // Datos a guardar
-        const dataToSave = {
-            [pKey]: personal,
-            [tKey]: turnos
-        };
 
-        // Guardar en servidor
-        try {
-            const response = await fetch('/api/data', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(dataToSave)
-            });
-            
-            if (response.ok) {
-                console.log(`Datos guardados correctamente en servidor (${pKey})`);
-            } else {
-                throw new Error('Error en respuesta del servidor');
-            }
-        } catch (serverError) {
-            console.error('Error guardando en servidor:', serverError);
-            throw serverError; // Re-throw para activar el fallback
-        }
-
-        // Respaldo en localStorage (por redundancia y offline)
+        // Intentar usar localStorage primero
         if (typeof(Storage) !== "undefined") {
             localStorage.setItem(pKey, JSON.stringify(personal));
             localStorage.setItem(tKey, JSON.stringify(turnos));
+            console.log(`Datos guardados correctamente en localStorage (${pKey})`);
             // Respaldo automático versionado (throttled)
             scheduleAutoBackup();
+        } else {
+            // Fallback: usar cookies si localStorage no está disponible
+            setCookie(pKey, JSON.stringify(personal), 365);
+            setCookie(tKey, JSON.stringify(turnos), 365);
+            console.log('Datos guardados en cookies (fallback)');
         }
-
     } catch (e) {
         console.error('Error guardando datos:', e);
-        
-        // Fallback: intentar localStorage si falló el servidor
+        // Intentar fallback con cookies
         try {
             const { pKey, tKey } = getDataKeys();
-            if (typeof(Storage) !== "undefined") {
-                localStorage.setItem(pKey, JSON.stringify(personal));
-                localStorage.setItem(tKey, JSON.stringify(turnos));
-                console.log('Datos guardados en localStorage (fallback)');
-            } else {
-                 // Último recurso: cookies
-                setCookie(pKey, JSON.stringify(personal), 365);
-                setCookie(tKey, JSON.stringify(turnos), 365);
-                console.log('Datos guardados en cookies (fallback extremo)');
-            }
-        } catch (fallbackError) {
-            console.error('Error en fallback de guardado:', fallbackError);
-            showNotification('Error: No se pudieron guardar los datos. Verifique su conexión.');
+            setCookie(pKey, JSON.stringify(personal), 365);
+            setCookie(tKey, JSON.stringify(turnos), 365);
+            showNotification('Datos guardados usando cookies (modo compatibilidad)');
+        } catch (cookieError) {
+            console.error('Error guardando en cookies:', cookieError);
+            showNotification('Error: No se pudieron guardar los datos. Verifique la configuración del navegador.');
         }
     }
 }
@@ -4114,7 +3980,7 @@ function calculateAnnualStats(year) {
 }
 
 // Función para guardar log anual
-async function saveAnnualLog(year, stats) {
+function saveAnnualLog(year, stats) {
     try {
         const logData = {
             year: year,
@@ -4124,9 +3990,13 @@ async function saveAnnualLog(year, stats) {
         };
         
         // Obtener logs existentes
-        let annualLogs = getAnnualLogs();
-        // Asegurar que sea un array
-        if (!Array.isArray(annualLogs)) annualLogs = [];
+        let annualLogs = [];
+        if (typeof(Storage) !== "undefined") {
+            const savedLogs = localStorage.getItem('vigilancia-annual-logs');
+            if (savedLogs) {
+                annualLogs = JSON.parse(savedLogs);
+            }
+        }
         
         // Verificar si ya existe un log para este año
         const existingLogIndex = annualLogs.findIndex(log => log.year === year);
@@ -4141,16 +4011,10 @@ async function saveAnnualLog(year, stats) {
         // Mantener solo los últimos 10 años de logs
         annualLogs = annualLogs.sort((a, b) => b.year - a.year).slice(0, 10);
         
-        // Actualizar global
-        currentAnnualLogs = annualLogs;
-        
         // Guardar logs actualizados
         if (typeof(Storage) !== "undefined") {
             localStorage.setItem('vigilancia-annual-logs', JSON.stringify(annualLogs));
         }
-        
-        // Sync server
-        syncLogsToServer();
         
         console.log(`Log anual guardado para el año ${year}`);
         return true;
@@ -4263,32 +4127,32 @@ function resetAnnualTypes(types = ['articulo26', 'estres']) {
 }
 
 // Función para verificar si es necesario hacer reset anual
-async function checkAnnualReset() {
+function checkAnnualReset() {
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     
     // Verificar si es 1 de enero
     if (currentDate.getMonth() === 0 && currentDate.getDate() === 1) {
         // Verificar si ya se hizo el reset este año
-        const lastResetYear = getSystemState('vigilancia-last-reset-year');
+        const lastResetYear = localStorage.getItem('vigilancia-last-reset-year');
         
         if (!lastResetYear || parseInt(lastResetYear) < currentYear) {
             // Mostrar confirmación al usuario
             if (confirm(`¡Es 1 de enero de ${currentYear}!\n\n¿Desea archivar las estadísticas del año ${currentYear - 1} y reiniciar el sistema para el nuevo año?\n\nEsto guardará todas las estadísticas del año anterior en los logs y limpiará los datos para comenzar el nuevo año.`)) {
                 const resetSuccess = resetAnnualData('automatic');
                 if (resetSuccess) {
-                    await saveSystemState('vigilancia-last-reset-year', currentYear.toString());
+                    localStorage.setItem('vigilancia-last-reset-year', currentYear.toString());
                 }
             }
         }
 
         // Renovación específica de Artículo 26 y Estrés (evitar repetir en el mismo año)
-        const lastTypesResetYear = getSystemState('vigilancia-last-a26-estres-reset-year');
+        const lastTypesResetYear = localStorage.getItem('vigilancia-last-a26-estres-reset-year');
         if (!lastTypesResetYear || parseInt(lastTypesResetYear) < currentYear) {
             if (confirm(`¿Desea renovar Artículo 26 y Estrés del año ${currentYear - 1}?\n\nSe conservarán el resto de los turnos y todo lo cargado para ${currentYear} y años siguientes.`)) {
                 const typesResetSuccess = resetAnnualTypes(['articulo26', 'estres']);
                 if (typesResetSuccess) {
-                    await saveSystemState('vigilancia-last-a26-estres-reset-year', currentYear.toString());
+                    localStorage.setItem('vigilancia-last-a26-estres-reset-year', currentYear.toString());
                 }
             }
         }
@@ -4297,7 +4161,6 @@ async function checkAnnualReset() {
 
 // Función para obtener logs anuales
 function getAnnualLogs() {
-    if (currentAnnualLogs) return currentAnnualLogs;
     try {
         if (typeof(Storage) !== "undefined") {
             const savedLogs = localStorage.getItem('vigilancia-annual-logs');
@@ -4433,7 +4296,6 @@ function loadAnnualLogs() {
 
 // Logs de movimientos
 function getMovementLogs() {
-    if (currentMovementLogs) return currentMovementLogs;
     try {
         if (typeof(Storage) !== "undefined") {
             const saved = localStorage.getItem('vigilancia-movement-logs');
@@ -4445,21 +4307,15 @@ function getMovementLogs() {
     return [];
 }
 
-async function addMovementLog(entry) {
+function addMovementLog(entry) {
     try {
         const logs = getMovementLogs();
         logs.unshift(entry);
         // Limitar tamaño a últimos 300 movimientos
         const trimmed = logs.slice(0, 300);
-        
-        currentMovementLogs = trimmed;
-        
         if (typeof(Storage) !== "undefined") {
             localStorage.setItem('vigilancia-movement-logs', JSON.stringify(trimmed));
         }
-        
-        // Server sync
-        syncLogsToServer(); // Fire and forget
     } catch (e) {
         console.error('Error guardando movement log:', e);
     }
@@ -4773,59 +4629,26 @@ function renderMovementLogDetailsHTML(log) {
     return '<p>Sin detalles</p>';
 }
 
-async function loadUsers() {
-    users = [];
-    let loadedFromServer = false;
+function loadUsers() {
     try {
-        // 1. Intentar cargar desde el servidor
-        const response = await fetch('/api/data');
-        if (response.ok) {
-            const serverData = await response.json();
-            if (serverData['vigilancia-users']) {
-                users = serverData['vigilancia-users'];
+        if (typeof(Storage) !== "undefined") {
+            const saved = localStorage.getItem('vigilancia-users');
+            if (saved) {
+                users = JSON.parse(saved);
                 if (!Array.isArray(users)) users = [];
-                loadedFromServer = true;
             }
         }
     } catch (e) {
-        console.warn('Error loading users from server:', e);
-    }
-
-    // 2. Fallback / Merge from LocalStorage
-    if (!loadedFromServer) {
-        try {
-            if (typeof(Storage) !== "undefined") {
-                const saved = localStorage.getItem('vigilancia-users');
-                if (saved) {
-                    users = JSON.parse(saved);
-                    if (!Array.isArray(users)) users = [];
-                }
-            }
-        } catch (e) {
-            console.error('Error cargando usuarios local:', e);
-            users = [];
-        }
-        
-        // Si hay usuarios locales y falló el servidor, intentamos sincronizar hacia arriba
-        if (users.length > 0) {
-             saveUsers(); 
-        }
+        console.error('Error cargando usuarios:', e);
+        users = [];
     }
 }
 
-async function saveUsers() {
+function saveUsers() {
     try {
-        // Local save
         if (typeof(Storage) !== "undefined") {
             localStorage.setItem('vigilancia-users', JSON.stringify(users));
         }
-        
-        // Server save
-        await fetch('/api/data', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 'vigilancia-users': users })
-        });
     } catch (e) {
         console.error('Error guardando usuarios:', e);
     }
@@ -4843,107 +4666,70 @@ function getDataKeys() {
     return { pKey, tKey };
 }
 
-async function loadData() {
-    await loadUsers(); // Asegurar que users estén cargados
-    await loadSettingsData(); // Cargar configuraciones
-    await loadHolidaysData(); // Cargar feriados
-    await loadLogsData(); // Cargar logs
-    await loadSystemStateData(); // Cargar estado del sistema
+function loadData() {
+    loadUsers(); // Asegurar que users estén cargados
     
     try {
+        let savedPersonal, savedTurnos;
         const { pKey, tKey } = getDataKeys();
-        let loadedFromServer = false;
-
-        // 1. Intentar cargar desde el servidor
-        try {
-            const response = await fetch('/api/data');
-            if (response.ok) {
-                const serverData = await response.json();
-                
-                if (serverData[pKey]) {
-                    personal = serverData[pKey];
-                    loadedFromServer = true;
-                }
-                
-                if (serverData[tKey]) {
-                    turnos = serverData[tKey];
-                    // Si encontramos turnos, consideramos que cargamos del servidor
-                    loadedFromServer = true;
-                }
-            }
-        } catch (serverError) {
-            console.warn('No se pudo cargar del servidor, intentando local:', serverError);
-        }
-
-        // 2. Si no se cargó del servidor, intentar localStorage/cookies (Fallback y Migración)
-        if (!loadedFromServer) {
-            let savedPersonalStr, savedTurnosStr;
-            
-            // Intentar cargar desde localStorage primero
-            if (typeof(Storage) !== "undefined") {
-                savedPersonalStr = localStorage.getItem(pKey);
-                savedTurnosStr = localStorage.getItem(tKey);
-            }
-            
-            // Si no hay datos en localStorage, intentar cookies
-            if (!savedPersonalStr || !savedTurnosStr) {
-                savedPersonalStr = savedPersonalStr || getCookie(pKey);
-                savedTurnosStr = savedTurnosStr || getCookie(tKey);
-            }
-            
-            if (savedPersonalStr) {
-                try {
-                    personal = JSON.parse(savedPersonalStr);
-                } catch (e) {
-                    console.error('Error parsing personal data:', e);
-                    personal = [];
-                }
-            }
-            
-            if (savedTurnosStr) {
-                try {
-                    turnos = JSON.parse(savedTurnosStr);
-                } catch (e) {
-                    console.error('Error parsing turnos data:', e);
-                    turnos = {};
-                }
-            }
-
-            // Migración: Si tenemos datos locales y no falló explícitamente el servidor (simplemente estaba vacío), guardamos.
-            // Nota: Si el servidor falló (catch arriba), saveData también fallará probablemente, pero lo intentamos.
-            if (savedPersonalStr || savedTurnosStr) {
-                console.log('Migrando datos locales al servidor...');
-                saveData(); 
-            }
+        
+        // Intentar cargar desde localStorage primero
+        if (typeof(Storage) !== "undefined") {
+            savedPersonal = localStorage.getItem(pKey);
+            savedTurnos = localStorage.getItem(tKey);
         }
         
-        // 3. Normalización y validación
-        if (!Array.isArray(personal)) {
+        // Si no hay datos en localStorage, intentar cookies
+        if (!savedPersonal || !savedTurnos) {
+            savedPersonal = savedPersonal || getCookie(pKey);
+            savedTurnos = savedTurnos || getCookie(tKey);
+        }
+        
+        if (savedPersonal) {
+            try {
+                personal = JSON.parse(savedPersonal);
+                if (!Array.isArray(personal)) {
+                    personal = [];
+                }
+            } catch (e) {
+                console.error('Error parsing personal data:', e);
+                personal = [];
+            }
+        } else {
             personal = [];
         }
         
-        // turnos debe ser un objeto, no un array
-        if (typeof turnos !== 'object' || turnos === null || Array.isArray(turnos)) {
+        if (savedTurnos) {
+            try {
+                turnos = JSON.parse(savedTurnos);
+                // turnos debe ser un objeto, no un array
+                if (typeof turnos !== 'object' || turnos === null || Array.isArray(turnos)) {
+                    turnos = {};
+                }
+                // Normalizar tipos antiguos
+                try {
+                    Object.keys(turnos).forEach(f => {
+                        const per = turnos[f];
+                        Object.keys(per || {}).forEach(pid => {
+                            const t = per[pid];
+                            if (t && t.tipo === 'carretera') {
+                                t.tipo = 'carpeta_medica';
+                                per[pid] = t;
+                            }
+                        });
+                    });
+                } catch {}
+            } catch (e) {
+                console.error('Error parsing turnos data:', e);
+                turnos = {};
+            }
+        } else {
             turnos = {};
         }
         
-        // Normalizar tipos antiguos
-        try {
-            Object.keys(turnos).forEach(f => {
-                const per = turnos[f];
-                Object.keys(per || {}).forEach(pid => {
-                    const t = per[pid];
-                    if (t && t.tipo === 'carretera') {
-                        t.tipo = 'carpeta_medica';
-                        per[pid] = t;
-                    }
-                });
-            });
-        } catch {}
-        
         console.log(`Datos cargados (${pKey}):`, { personal: personal.length, turnos: Object.keys(turnos).length });
     } catch (e) {
-        console.error('Error general en loadData:', e);
+        console.error('Error accediendo a almacenamiento:', e);
         showNotification('Advertencia: No se pudieron cargar los datos guardados.');
     }
 }
@@ -5189,7 +4975,17 @@ function getCustomTypeConfig(id) {
 }
 
 function applyCustomStyleIfAny(el, tipo) {
-    const cfg = getCustomTypeConfig(tipo);
+    // Check custom types first
+    let cfg = getCustomTypeConfig(tipo);
+    
+    // If not found, check standard types in codeMap
+    if (!cfg) {
+        const s = getSettings();
+        if (s.codeMap && s.codeMap[tipo] && s.codeMap[tipo].style) {
+            cfg = { style: s.codeMap[tipo].style };
+        }
+    }
+
     if (cfg && cfg.style) {
         const st = cfg.style;
         if (st.bg) el.style.backgroundColor = st.bg;
@@ -5203,39 +4999,7 @@ function applyCustomStyleIfAny(el, tipo) {
     }
 }
 
-async function loadSettingsData() {
-    let s = {};
-    let loadedFromServer = false;
-    try {
-        const response = await fetch('/api/data');
-        if (response.ok) {
-            const serverData = await response.json();
-            if (serverData['vigilancia-settings']) {
-                s = serverData['vigilancia-settings'];
-                loadedFromServer = true;
-            }
-        }
-    } catch (e) {
-        console.warn('Error loading settings from server:', e);
-    }
-
-    if (!loadedFromServer) {
-        try {
-            const raw = localStorage.getItem('vigilancia-settings');
-            if (raw) s = JSON.parse(raw);
-        } catch {}
-    }
-    
-    currentSettings = s && typeof s === 'object' ? s : {};
-    
-    // Fallback sync if we have local data and server failed (or empty)
-    if (!loadedFromServer && Object.keys(currentSettings).length > 0) {
-         saveSettings(currentSettings);
-    }
-}
-
 function getSettings() {
-    if (currentSettings) return currentSettings;
     try {
         const raw = localStorage.getItem('vigilancia-settings');
         const s = raw ? JSON.parse(raw) : {};
@@ -5243,18 +5007,8 @@ function getSettings() {
     } catch { return {}; }
 }
 
-async function saveSettings(s) {
-    currentSettings = s || {};
-    try { 
-        localStorage.setItem('vigilancia-settings', JSON.stringify(currentSettings)); 
-        await fetch('/api/data', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 'vigilancia-settings': currentSettings })
-        });
-    } catch (e) {
-        console.error('Error saving settings:', e);
-    }
+function saveSettings(s) {
+    try { localStorage.setItem('vigilancia-settings', JSON.stringify(s || {})); } catch {}
 }
 
 function getCodigoForTipo(tipo) {
@@ -5292,16 +5046,28 @@ document.addEventListener('DOMContentLoaded', () => {
                         const base = getDefaultCodeMap();
                         const s = getSettings();
                         const codeMap = {};
-                        Object.keys(base).forEach(k => {
-                            const codeInp = document.getElementById(`code-${k}`);
-                            const nameInp = document.getElementById(`name-${k}`);
-                            const v = codeInp ? codeInp.value.trim() : '';
-                            const nm = nameInp ? nameInp.value.trim() : '';
-                            codeMap[k] = { code: v || base[k], name: nm };
-                        });
+                        
+                        // Save standard types (from temp state or legacy inputs)
+                        if (window.tempStandardTypes) {
+                            window.tempStandardTypes.forEach(st => {
+                                codeMap[st.id] = { code: st.code, name: st.name, style: st.style };
+                            });
+                        } else {
+                            Object.keys(base).forEach(k => {
+                                const codeInp = document.getElementById(`code-${k}`);
+                                const nameInp = document.getElementById(`name-${k}`);
+                                const v = codeInp ? codeInp.value.trim() : '';
+                                const nm = nameInp ? nameInp.value.trim() : '';
+                                codeMap[k] = { code: v || base[k], name: nm };
+                            });
+                        }
                         const list = document.getElementById('custom-types-list');
-                        const customTypes = [];
-                        if (list) {
+                        let customTypes = [];
+                        if (window.tempCustomTypes) {
+                            // Use the temporary state from the new UI
+                            customTypes = window.tempCustomTypes.filter(ct => ct.id && ct.code);
+                        } else if (list) {
+                            // Fallback to scraping logic (legacy)
                             Array.from(list.querySelectorAll('.custom-type-row')).forEach(row => {
                                 const idI = row.querySelector('.ct-id');
                                 const nameI = row.querySelector('.ct-name');
@@ -5330,6 +5096,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                     codeMap[id] = { code: ct.code, name: ct.name };
                                 }
                             });
+                        }
+                        
+                        // Ensure codeMap is updated with custom types from window.tempCustomTypes as well
+                        if (window.tempCustomTypes) {
+                             customTypes.forEach(ct => {
+                                codeMap[ct.id] = { code: ct.code, name: ct.name };
+                             });
                         }
                         const newS = {
                             timezone: tzInput ? tzInput.value.trim() || 'America/Argentina/Buenos_Aires' : 'America/Argentina/Buenos_Aires',
@@ -5580,65 +5353,382 @@ function openSettingsModal() {
         syncBtn.dataset.boundClick = '1';
     }
     const base = getDefaultCodeMap();
-    Object.keys(base).forEach(k => {
-        const inp = document.getElementById(`code-${k}`);
-        if (inp) inp.value = (s.codeMap && s.codeMap[k] && s.codeMap[k].code) ? s.codeMap[k].code : base[k];
-        const nameInp = document.getElementById(`name-${k}`);
-        if (nameInp) nameInp.value = (s.codeMap && s.codeMap[k] && s.codeMap[k].name) ? s.codeMap[k].name : '';
-    });
+    const stList = document.getElementById('standard-types-list');
+    if (stList) {
+        const baseNames = getDefaultTypeNames();
+        // Initialize temporary state for standard types
+        window.tempStandardTypes = Object.keys(base).map(k => {
+            const saved = (s.codeMap && s.codeMap[k]) || {};
+            return {
+                id: k,
+                name: saved.name || baseNames[k],
+                code: saved.code || base[k],
+                style: saved.style || { bg: '#eee', text: '#333', border: '#ccc' }
+            };
+        });
+
+        const renderSTList = () => {
+            stList.innerHTML = '';
+            const header = document.createElement('div');
+            header.className = 'ct-list-header';
+            header.innerHTML = '<span>Nombre visible</span><span>Código</span><span style="text-align:right">Acciones</span>';
+            stList.appendChild(header);
+
+            window.tempStandardTypes.forEach((st, index) => {
+                const row = document.createElement('div');
+                row.className = 'ct-summary-row';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'ct-summary-name';
+                nameSpan.textContent = st.name;
+                
+                const codeSpan = document.createElement('span');
+                codeSpan.className = 'ct-summary-code';
+                const bg = st.style?.bg || '#eee';
+                const col = st.style?.text || '#333';
+                const brd = st.style?.border || '#ccc';
+                codeSpan.innerHTML = `<span class="badge" style="background:${bg};color:${col};border:1px solid ${brd}">${st.code}</span>`;
+                
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'ct-summary-actions';
+                
+                const editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.className = 'btn-icon ct-edit-btn';
+                editBtn.innerHTML = '<i class="fas fa-cog"></i>';
+                editBtn.title = 'Configurar';
+                editBtn.onclick = () => renderSTEdit(index);
+                
+                actionsDiv.appendChild(editBtn);
+                
+                row.appendChild(nameSpan);
+                row.appendChild(codeSpan);
+                row.appendChild(actionsDiv);
+                stList.appendChild(row);
+            });
+        };
+
+        const renderSTEdit = (index) => {
+            stList.innerHTML = '';
+            const st = window.tempStandardTypes[index];
+            
+            const editHeader = document.createElement('div');
+            editHeader.className = 'ct-edit-header';
+            editHeader.innerHTML = `<h4>Editando: ${st.name}</h4>`;
+            stList.appendChild(editHeader);
+
+            const formContainer = document.createElement('div');
+            formContainer.className = 'ct-edit-form';
+
+            const createField = (label, input) => {
+                const grp = document.createElement('div');
+                grp.className = 'form-group';
+                const lbl = document.createElement('label');
+                lbl.textContent = label;
+                grp.appendChild(lbl);
+                grp.appendChild(input);
+                return grp;
+            };
+
+            const nameInp = document.createElement('input'); nameInp.type = 'text'; nameInp.value = st.name || '';
+            nameInp.className = 'ct-pill-input ct-pill-name';
+            nameInp.oninput = (e) => st.name = e.target.value;
+            formContainer.appendChild(createField('Nombre visible:', nameInp));
+
+            // Preview Badge
+            const previewBadge = document.createElement('span');
+            previewBadge.className = 'badge';
+            const updatePreview = () => {
+                previewBadge.textContent = st.code || 'CODE';
+                previewBadge.style.backgroundColor = st.style?.bg || '#eee';
+                previewBadge.style.color = st.style?.text || '#333';
+                previewBadge.style.border = `1px solid ${st.style?.border || '#ccc'}`;
+            };
+            updatePreview();
+
+            const codeInp = document.createElement('input'); codeInp.type = 'text'; codeInp.value = st.code || '';
+            codeInp.className = 'ct-pill-input ct-pill-code';
+            codeInp.oninput = (e) => { st.code = e.target.value; updatePreview(); };
+            formContainer.appendChild(createField('Código:', codeInp));
+
+            // Colors
+            const colorsDiv = document.createElement('div');
+            colorsDiv.className = 'ct-colors-grid';
+            
+            const bgInp = document.createElement('input'); bgInp.type = 'color'; bgInp.value = st.style?.bg || '#eee';
+            bgInp.oninput = (e) => { if(!st.style) st.style={}; st.style.bg = e.target.value; updatePreview(); };
+            colorsDiv.appendChild(createField('Fondo', bgInp));
+            
+            const borderInp = document.createElement('input'); borderInp.type = 'color'; borderInp.value = st.style?.border || '#ccc';
+            borderInp.oninput = (e) => { if(!st.style) st.style={}; st.style.border = e.target.value; updatePreview(); };
+            colorsDiv.appendChild(createField('Borde', borderInp));
+            
+            const textInp = document.createElement('input'); textInp.type = 'color'; textInp.value = st.style?.text || '#333';
+            textInp.oninput = (e) => { if(!st.style) st.style={}; st.style.text = e.target.value; updatePreview(); };
+            colorsDiv.appendChild(createField('Texto', textInp));
+
+            // Preview Group
+            const previewGrp = document.createElement('div');
+            previewGrp.className = 'form-group';
+            const previewLbl = document.createElement('label');
+            previewLbl.textContent = 'Vista previa';
+            const previewBox = document.createElement('div');
+            previewBox.style.height = '36px'; 
+            previewBox.style.display = 'flex';
+            previewBox.style.alignItems = 'center';
+            previewBox.appendChild(previewBadge);
+            previewGrp.appendChild(previewLbl);
+            previewGrp.appendChild(previewBox);
+            colorsDiv.appendChild(previewGrp);
+            
+            formContainer.appendChild(colorsDiv);
+
+            const doneBtn = document.createElement('button');
+            doneBtn.type = 'button';
+            doneBtn.className = 'btn-primary';
+            doneBtn.textContent = 'Listo / Volver a lista';
+            doneBtn.style.marginTop = '15px';
+            doneBtn.onclick = () => renderSTList();
+            
+            formContainer.appendChild(doneBtn);
+            stList.appendChild(formContainer);
+        };
+
+        renderSTList();
+    } else {
+        // Fallback for legacy inputs if standard-types-list not present
+        Object.keys(base).forEach(k => {
+            const inp = document.getElementById(`code-${k}`);
+            if (inp) inp.value = (s.codeMap && s.codeMap[k] && s.codeMap[k].code) ? s.codeMap[k].code : base[k];
+            const nameInp = document.getElementById(`name-${k}`);
+            if (nameInp) nameInp.value = (s.codeMap && s.codeMap[k] && s.codeMap[k].name) ? s.codeMap[k].name : '';
+        });
+    }
     const list = document.getElementById('custom-types-list');
     if (list) {
-        list.innerHTML = '';
-        const header = document.createElement('div');
-        header.className = 'header';
-        header.innerHTML = '<span>ID</span><span>Nombre visible</span><span>Código</span><span>Fondo</span><span>Borde</span><span>Texto</span><span></span><span></span><span>Acciones</span>';
-        list.appendChild(header);
-        const items = (s.customTypes || []);
-        let ctRowCounter = 0;
-        const addRow = (it = { id: '', name: '', code: '', style: {}, requireTime: false, requireDateRange: false }) => {
-            const row = document.createElement('div');
-            row.className = 'custom-type-row';
-            const idI = document.createElement('input'); idI.type = 'text'; idI.placeholder = 'ej: permiso'; idI.value = it.id || ''; idI.className = 'ct-id'; idI.id = `ct-id-${ctRowCounter}`; idI.name = `ct-id-${ctRowCounter}`;
-            const nameI = document.createElement('input'); nameI.type = 'text'; nameI.placeholder = 'Nombre visible'; nameI.value = it.name || ''; nameI.className = 'ct-name'; nameI.id = `ct-name-${ctRowCounter}`; nameI.name = `ct-name-${ctRowCounter}`;
-            const codeI = document.createElement('input'); codeI.type = 'text'; codeI.placeholder = 'Código'; codeI.value = it.code || ''; codeI.className = 'ct-code'; codeI.id = `ct-code-${ctRowCounter}`; codeI.name = `ct-code-${ctRowCounter}`;
-            const bgI = document.createElement('input'); bgI.type = 'color'; bgI.value = (it.style && it.style.bg) || '#f3f4f6'; bgI.className = 'ct-bg'; bgI.id = `ct-bg-${ctRowCounter}`; bgI.name = `ct-bg-${ctRowCounter}`;
-            const brI = document.createElement('input'); brI.type = 'color'; brI.value = (it.style && it.style.border) || '#e5e7eb'; brI.className = 'ct-border'; brI.id = `ct-border-${ctRowCounter}`; brI.name = `ct-border-${ctRowCounter}`;
-            const txI = document.createElement('input'); txI.type = 'color'; txI.value = (it.style && it.style.text) || '#374151'; txI.className = 'ct-text'; txI.id = `ct-text-${ctRowCounter}`; txI.name = `ct-text-${ctRowCounter}`;
-            const bgWrap = document.createElement('div'); bgWrap.className = 'ct-color-wrap ct-bg-wrap'; const bgLbl = document.createElement('label'); bgLbl.className = 'ct-label'; bgLbl.textContent = 'Fondo'; bgLbl.setAttribute('for', bgI.id); bgWrap.appendChild(bgLbl); bgWrap.appendChild(bgI);
-            const brWrap = document.createElement('div'); brWrap.className = 'ct-color-wrap ct-border-wrap'; const brLbl = document.createElement('label'); brLbl.className = 'ct-label'; brLbl.textContent = 'Borde'; brLbl.setAttribute('for', brI.id); brWrap.appendChild(brLbl); brWrap.appendChild(brI);
-            const txWrap = document.createElement('div'); txWrap.className = 'ct-color-wrap ct-text-wrap'; const txLbl = document.createElement('label'); txLbl.className = 'ct-label'; txLbl.textContent = 'Texto'; txLbl.setAttribute('for', txI.id); txWrap.appendChild(txLbl); txWrap.appendChild(txI);
-            const timeCk = document.createElement('input'); timeCk.type = 'checkbox'; timeCk.checked = !!it.requireTime; timeCk.className = 'ct-time'; timeCk.id = `ct-time-${ctRowCounter}`; timeCk.name = `ct-time-${ctRowCounter}`;
-            const rangeCk = document.createElement('input'); rangeCk.type = 'checkbox'; rangeCk.checked = !!it.requireDateRange; rangeCk.className = 'ct-range'; rangeCk.id = `ct-range-${ctRowCounter}`; rangeCk.name = `ct-range-${ctRowCounter}`;
-            const timeWrap = document.createElement('div'); timeWrap.className = 'ct-check-wrap ct-time-wrap'; const timeLbl = document.createElement('label'); timeLbl.className = 'ct-label'; timeLbl.textContent = 'Hora (E/S)'; timeLbl.setAttribute('for', timeCk.id); timeWrap.appendChild(timeLbl); timeWrap.appendChild(timeCk);
-            const rangeWrap = document.createElement('div'); rangeWrap.className = 'ct-check-wrap ct-range-wrap'; const rangeLbl = document.createElement('label'); rangeLbl.className = 'ct-label'; rangeLbl.textContent = 'Rango fechas'; rangeLbl.setAttribute('for', rangeCk.id); rangeWrap.appendChild(rangeLbl); rangeWrap.appendChild(rangeCk);
-            const delBtn = document.createElement('button'); delBtn.type = 'button'; delBtn.textContent = 'Quitar'; delBtn.className = 'btn-secondary';
-            delBtn.addEventListener('click', () => row.remove());
-            row.appendChild(idI); row.appendChild(nameI); row.appendChild(codeI);
-            row.appendChild(bgWrap); row.appendChild(brWrap); row.appendChild(txWrap);
-            row.appendChild(timeWrap); row.appendChild(rangeWrap);
-            row.appendChild(delBtn);
-            list.appendChild(row);
-            ctRowCounter++;
+        // Initialize temporary state for editing
+        window.tempCustomTypes = JSON.parse(JSON.stringify(s.customTypes || []));
+
+        // Function to render the summary list
+        const renderCTList = () => {
+            list.innerHTML = '';
+            
+            // Simplified Header
+            const header = document.createElement('div');
+            header.className = 'ct-list-header';
+            header.innerHTML = '<span>Nombre visible</span><span>Código</span><span style="text-align:right">Acciones</span>';
+            list.appendChild(header);
+
+            if (window.tempCustomTypes.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'ct-empty';
+                empty.textContent = 'No hay tipos personalizados.';
+                list.appendChild(empty);
+            }
+
+            window.tempCustomTypes.forEach((ct, index) => {
+                const row = document.createElement('div');
+                row.className = 'ct-summary-row';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'ct-summary-name';
+                nameSpan.textContent = ct.name || ct.id || '(Sin nombre)';
+                
+                const codeSpan = document.createElement('span');
+                codeSpan.className = 'ct-summary-code';
+                codeSpan.innerHTML = ct.code ? `<span class="badge" style="background:${ct.style?.bg||'#eee'};color:${ct.style?.text||'#000'};border:1px solid ${ct.style?.border||'#ccc'}">${ct.code}</span>` : '-';
+                
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'ct-summary-actions';
+                
+                const editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.className = 'btn-icon ct-edit-btn';
+                editBtn.innerHTML = '<i class="fas fa-cog"></i>';
+                editBtn.title = 'Configurar';
+                editBtn.onclick = () => renderCTEdit(index);
+                
+                const delBtn = document.createElement('button');
+                delBtn.type = 'button';
+                delBtn.className = 'btn-icon ct-del-btn';
+                delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+                delBtn.title = 'Eliminar';
+                delBtn.onclick = () => {
+                    showConfirmModal({
+                        title: 'Eliminar tipo',
+                        message: '¿Está seguro de eliminar este tipo personalizado?',
+                        onAccept: () => {
+                            window.tempCustomTypes.splice(index, 1);
+                            renderCTList();
+                        }
+                    });
+                };
+
+                actionsDiv.appendChild(editBtn);
+                actionsDiv.appendChild(delBtn);
+                
+                row.appendChild(nameSpan);
+                row.appendChild(codeSpan);
+                row.appendChild(actionsDiv);
+                list.appendChild(row);
+            });
+            
+            // Show "Add" button, Hide "Back" button (if any logic needed)
+            const addBtn = document.getElementById('add-custom-type');
+            if (addBtn) {
+                addBtn.style.display = 'inline-flex';
+                addBtn.onclick = () => {
+                    const newType = { id: '', name: '', code: '', style: { bg:'#f3f4f6', border:'#e5e7eb', text:'#374151' }, requireTime: false, requireDateRange: false };
+                    window.tempCustomTypes.push(newType);
+                    renderCTEdit(window.tempCustomTypes.length - 1);
+                };
+            }
         };
-        items.forEach(addRow);
-        const addBtn = document.getElementById('add-custom-type');
-        if (addBtn) {
-            addBtn.onclick = () => addRow();
-        }
+
+        // Function to render the edit form for a single item
+        const renderCTEdit = (index) => {
+            list.innerHTML = '';
+            const ct = window.tempCustomTypes[index];
+            
+            // Edit Header
+            const editHeader = document.createElement('div');
+            editHeader.className = 'ct-edit-header';
+            editHeader.innerHTML = `<h4>Editando: ${ct.name || 'Nuevo Tipo'}</h4>`;
+            list.appendChild(editHeader);
+
+            // Edit Form Container
+            const formContainer = document.createElement('div');
+            formContainer.className = 'ct-edit-form';
+
+            // Fields helper
+            const createField = (label, input) => {
+                const grp = document.createElement('div');
+                grp.className = 'form-group';
+                const lbl = document.createElement('label');
+                lbl.textContent = label;
+                
+                // Fix accessibility: ensure input has ID and label points to it
+                if (!input.id) {
+                    input.id = 'ct-field-' + Math.random().toString(36).substr(2, 9);
+                }
+                lbl.htmlFor = input.id;
+
+                grp.appendChild(lbl);
+                grp.appendChild(input);
+                return grp;
+            };
+
+            // Name (First for better UX)
+            const nameInp = document.createElement('input'); nameInp.type = 'text'; nameInp.value = ct.name || ''; nameInp.placeholder = 'Nombre visible';
+            nameInp.className = 'ct-pill-input ct-pill-name';
+            nameInp.oninput = (e) => ct.name = e.target.value;
+            formContainer.appendChild(createField('Nombre visible:', nameInp));
+
+            // Preview Badge Element (created early for scope access)
+            const previewBadge = document.createElement('span');
+            previewBadge.className = 'badge';
+            
+            const updatePreview = () => {
+                previewBadge.textContent = ct.code || 'CODE';
+                previewBadge.style.backgroundColor = ct.style?.bg || '#f3f4f6';
+                previewBadge.style.color = ct.style?.text || '#374151';
+                previewBadge.style.border = `1px solid ${ct.style?.border || '#e5e7eb'}`;
+            };
+            updatePreview();
+
+            // Row for Code and ID
+            const rowDiv = document.createElement('div');
+            rowDiv.className = 'ct-inputs-row';
+
+            // Code (Short)
+            const codeInp = document.createElement('input'); codeInp.type = 'text'; codeInp.value = ct.code || ''; codeInp.placeholder = 'Código';
+            codeInp.className = 'ct-pill-input ct-pill-code';
+            codeInp.oninput = (e) => { ct.code = e.target.value; updatePreview(); };
+            rowDiv.appendChild(createField('Código:', codeInp));
+
+            // ID (Technical)
+            const idInp = document.createElement('input'); idInp.type = 'text'; idInp.value = ct.id || ''; idInp.placeholder = 'ej: permiso_especial';
+            idInp.className = 'ct-pill-input ct-pill-id';
+            idInp.oninput = (e) => ct.id = sanitizeTypeId(e.target.value);
+            rowDiv.appendChild(createField('ID (Identificador único):', idInp));
+            
+            formContainer.appendChild(rowDiv);
+
+            // Colors
+            const colorsDiv = document.createElement('div');
+            colorsDiv.className = 'ct-colors-grid';
+            
+            const bgInp = document.createElement('input'); bgInp.type = 'color'; bgInp.value = ct.style?.bg || '#f3f4f6';
+            bgInp.oninput = (e) => { if(!ct.style) ct.style={}; ct.style.bg = e.target.value; updatePreview(); };
+            colorsDiv.appendChild(createField('Fondo', bgInp));
+            
+            const borderInp = document.createElement('input'); borderInp.type = 'color'; borderInp.value = ct.style?.border || '#e5e7eb';
+            borderInp.oninput = (e) => { if(!ct.style) ct.style={}; ct.style.border = e.target.value; updatePreview(); };
+            colorsDiv.appendChild(createField('Borde', borderInp));
+            
+            const textInp = document.createElement('input'); textInp.type = 'color'; textInp.value = ct.style?.text || '#374151';
+            textInp.oninput = (e) => { if(!ct.style) ct.style={}; ct.style.text = e.target.value; updatePreview(); };
+            colorsDiv.appendChild(createField('Texto', textInp));
+
+            // Preview Group
+            const previewGrp = document.createElement('div');
+            previewGrp.className = 'form-group';
+            const previewLbl = document.createElement('label');
+            previewLbl.textContent = 'Vista previa';
+            const previewBox = document.createElement('div');
+            previewBox.style.height = '36px'; 
+            previewBox.style.display = 'flex';
+            previewBox.style.alignItems = 'center';
+            previewBox.appendChild(previewBadge);
+            previewGrp.appendChild(previewLbl);
+            previewGrp.appendChild(previewBox);
+            colorsDiv.appendChild(previewGrp);
+            
+            formContainer.appendChild(colorsDiv);
+
+            // Checkboxes
+            const checksDiv = document.createElement('div');
+            checksDiv.className = 'ct-checks-grid';
+            
+            const timeLbl = document.createElement('label');
+            const timeCk = document.createElement('input'); timeCk.type = 'checkbox'; timeCk.checked = !!ct.requireTime;
+            timeCk.onchange = (e) => ct.requireTime = e.target.checked;
+            timeLbl.appendChild(timeCk); timeLbl.append(' Requerir Hora (Entrada/Salida)');
+            checksDiv.appendChild(timeLbl);
+            
+            const rangeLbl = document.createElement('label');
+            const rangeCk = document.createElement('input'); rangeCk.type = 'checkbox'; rangeCk.checked = !!ct.requireDateRange;
+            rangeCk.onchange = (e) => ct.requireDateRange = e.target.checked;
+            rangeLbl.appendChild(rangeCk); rangeLbl.append(' Requerir Rango de Fechas');
+            checksDiv.appendChild(rangeLbl);
+            
+            formContainer.appendChild(checksDiv);
+
+            // Done Button
+            const doneBtn = document.createElement('button');
+            doneBtn.type = 'button';
+            doneBtn.className = 'btn-primary';
+            doneBtn.textContent = 'Listo / Volver a lista';
+            doneBtn.style.marginTop = '15px';
+            doneBtn.onclick = () => renderCTList();
+            
+            formContainer.appendChild(doneBtn);
+            list.appendChild(formContainer);
+
+            // Hide "Add" button while editing
+            const addBtn = document.getElementById('add-custom-type');
+            if (addBtn) addBtn.style.display = 'none';
+        };
+
+        // Initial render
+        renderCTList();
     }
 
     const customCodesContainer = document.getElementById('custom-codes-rows');
     if (customCodesContainer) {
         customCodesContainer.innerHTML = '';
-        (s.customTypes || []).forEach(ct => {
-            const row = document.createElement('div');
-            row.className = 'row';
-            const span = document.createElement('span'); span.textContent = ct.name ? `${ct.name} (${ct.code})` : ct.id;
-            const nameInp = document.createElement('input'); nameInp.type = 'text'; nameInp.id = `name-${ct.id}`; nameInp.name = `name-${ct.id}`; nameInp.placeholder = 'Nombre visible'; nameInp.value = ct.name || '';
-            const codeInp = document.createElement('input'); codeInp.type = 'text'; codeInp.id = `code-${ct.id}`; codeInp.name = `code-${ct.id}`; codeInp.placeholder = 'Código'; codeInp.value = ct.code || '';
-            row.appendChild(span); row.appendChild(nameInp); row.appendChild(codeInp);
-            customCodesContainer.appendChild(row);
-        });
+        // Custom types are now managed in their own dedicated section ("Tipos personalizados")
+        // preventing duplicate inputs and conflicts.
     }
     modal.style.display = 'block';
     lockBodyScroll();

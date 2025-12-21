@@ -300,13 +300,16 @@ tbody tr:nth-child(odd) {
 }
 
 .calendar-container {
-    padding: 1rem;
+    padding: 0; /* padding eliminado para evitar que el contenido se vea al hacer scroll horizontal */
     overflow: auto; /* scroll vertical y horizontal dentro del marco */
     height: 70vh; /* altura fija para habilitar scroll vertical */
     position: relative; /* referencia para sticky top */
     -webkit-overflow-scrolling: touch; /* scroll con inercia en iOS */
     overscroll-behavior: contain; /* evita chaining de scroll en ambos ejes */
     cursor: grab;
+    background: #fff; /* asegurar fondo blanco */
+    border: 1px solid #ddd; /* borde sutil alrededor del contenedor */
+    border-radius: 4px;
 }
 
 /* Contenedor de scroll dedicado para la tabla */
@@ -343,20 +346,20 @@ tbody tr:nth-child(odd) {
     position: sticky;
     left: 0;
     background-color: #ffffff; /* fondo sólido para ocultar celdas detrás */
-    z-index: 20; /* encima del cuerpo y tooltips, debajo del thead */
+    z-index: 50; /* encima del cuerpo y tooltips, debajo del thead */
     text-align: left;
     min-width: 150px;
     max-width: 200px;
     border-right: 2px solid #adb5bd; /* Borde más grueso para separar nombres */
     border-left: 2px solid #adb5bd; /* Borde a la izquierda para contener hover y celdas */
     box-shadow: 3px 0 0 #ffffff; /* sombra blanca más ancha para cubrir cualquier fuga */
-    background-clip: padding-box; /* evita que los bordes transparenten contenido detrás */
+    /* Removed background-clip to ensure full coverage */
 }
 
 #calendar-table thead th:first-child {
     position: sticky;
     left: 0; /* fijar a la izquierda igual que la columna de nombres */
-    z-index: 12; /* por encima de otros th del encabezado y tooltips */
+    z-index: 60; /* por encima de otros th del encabezado y tooltips */
     min-width: 150px;
     max-width: 200px;
     background-color: #e9ecef; /* Fondo más contrastante */
@@ -364,7 +367,7 @@ tbody tr:nth-child(odd) {
     border-right: 2px solid #adb5bd;
     border-left: 2px solid #adb5bd; /* que coincida con la primera columna */
     box-shadow: 3px 0 0 #e9ecef; /* cubrir cualquier fuga en el borde derecho del header */
-    background-clip: padding-box;
+    /* Removed background-clip */
 }
 
 #calendar-table th {
@@ -900,10 +903,14 @@ body.modal-open {
     padding-bottom: 8px;
 }
 
-#personal-section .modal-content,
-#stats-section .modal-content {
+#personal-section .modal-content {
     max-width: 800px; /* Mantener tamaño grande para modales de gestión */
     width: 90%;
+}
+
+#stats-section .modal-content {
+    max-width: 1200px; /* Más ancho para la tabla de estadísticas */
+    width: 95%;
 }
 
 /* Modal Detalle del Movimiento: altura reducida y scroll interno */
@@ -1590,14 +1597,20 @@ body.modal-open {
     background: #ffffff;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
-    padding: 10px;
+    padding: 0; /* Eliminado padding para que el header sticky llegue al borde */
 }
 
 #movement-logs-content .logs-header {
     position: sticky; /* Mantener visible el encabezado mientras se hace scroll */
     top: 0;
-    z-index: 2;
-    border-radius: 8px;
+    z-index: 10; /* Aumentado para asegurar que cubra el contenido */
+    background-color: #eef2f6; /* Fondo sólido para ocultar contenido al hacer scroll */
+    padding: 15px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+#movement-logs-list {
+    padding: 15px; /* Espaciado interno para la lista de logs */
 }
 .movement-log-item {
     background: #ffffff;
@@ -2638,9 +2651,44 @@ body.menu-open { overflow: hidden; }
 #settings-modal .modal-content {
     max-width: 980px;
     width: 96%;
-    max-height: 85vh;
-    overflow-y: auto;
-    overflow-x: hidden;
+    max-height: 70vh; /* Altura reducida */
+    height: auto;
+    overflow-y: hidden; /* El contenedor principal no scrollea */
+    display: flex;
+    flex-direction: column;
+}
+
+#settings-modal .section-header {
+    flex-shrink: 0; /* No encoger el encabezado */
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+}
+
+#settings-form {
+    overflow-y: auto; /* Scroll interno para el formulario */
+    flex: 1;
+    padding-right: 4px;
+    display: flex;
+    flex-direction: column;
+}
+
+#settings-form > .form-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    background-color: #ffffff;
+    border-top: 1px solid #e5e7eb;
+    margin-top: auto; /* Empuja al fondo si hay poco contenido */
+    padding-top: 16px;
+    padding-bottom: 8px;
+    /* Box shadow para indicar separación al hacer scroll */
+    box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+#settings-modal .modal-body {
+    /* Clase eliminada/innecesaria si usamos el form como body */
+    display: none; 
 }
 
 #settings-modal fieldset.form-group {
