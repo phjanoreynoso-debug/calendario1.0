@@ -152,16 +152,37 @@
     align-items: end;
 }
 
-/* Color Inputs */
+/* Color Inputs - Custom Styling to override browser default */
 .ct-color-input {
+    -webkit-appearance: none;
+    appearance: none;
     width: 100%;
     height: 42px;
-    padding: 2px;
+    padding: 4px;
     border: 1px solid #d1d5db;
     border-radius: 6px;
     cursor: pointer;
     background: white;
     box-sizing: border-box;
+}
+
+.ct-color-input:focus {
+    border-color: #3498db;
+    outline: none;
+}
+
+.ct-color-input::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.ct-color-input::-webkit-color-swatch {
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 4px;
+}
+
+.ct-color-input::-moz-color-swatch {
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 4px;
 }
 
 /* Preview Box Alignment */
