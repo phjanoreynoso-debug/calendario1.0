@@ -5659,14 +5659,17 @@ function openSettingsModal() {
             colorsDiv.className = 'ct-colors-grid';
             
             const bgInp = document.createElement('input'); bgInp.type = 'color'; bgInp.value = ct.style?.bg || '#f3f4f6';
+            bgInp.className = 'ct-color-input';
             bgInp.oninput = (e) => { if(!ct.style) ct.style={}; ct.style.bg = e.target.value; updatePreview(); };
             colorsDiv.appendChild(createField('Fondo', bgInp));
             
             const borderInp = document.createElement('input'); borderInp.type = 'color'; borderInp.value = ct.style?.border || '#e5e7eb';
+            borderInp.className = 'ct-color-input';
             borderInp.oninput = (e) => { if(!ct.style) ct.style={}; ct.style.border = e.target.value; updatePreview(); };
             colorsDiv.appendChild(createField('Borde', borderInp));
             
             const textInp = document.createElement('input'); textInp.type = 'color'; textInp.value = ct.style?.text || '#374151';
+            textInp.className = 'ct-color-input';
             textInp.oninput = (e) => { if(!ct.style) ct.style={}; ct.style.text = e.target.value; updatePreview(); };
             colorsDiv.appendChild(createField('Texto', textInp));
 
@@ -5676,9 +5679,7 @@ function openSettingsModal() {
             const previewLbl = document.createElement('label');
             previewLbl.textContent = 'Vista previa';
             const previewBox = document.createElement('div');
-            previewBox.style.height = '36px'; 
-            previewBox.style.display = 'flex';
-            previewBox.style.alignItems = 'center';
+            previewBox.className = 'ct-preview-box';
             previewBox.appendChild(previewBadge);
             previewGrp.appendChild(previewLbl);
             previewGrp.appendChild(previewBox);
