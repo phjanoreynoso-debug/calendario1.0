@@ -1,465 +1,468 @@
 
-/* Global Scrollbar Styles */
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-::-webkit-scrollbar-track {
-    background: #f1f1f1; 
-}
-::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8;
-}
-* {
-    scrollbar-width: thin;
-    scrollbar-color: #c1c1c1 #f1f1f1;
+/* Corrección para inputs de horario por día (Píldoras más cortas) */
+.perday-grid-modern {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 15px;
+  max-width: 450px;
 }
 
-/* Modern Form */
-.modern-form {
-    padding: 24px;
-    overflow-y: auto;
-    flex-grow: 1;
+.perday-header-row {
+  display: grid;
+  grid-template-columns: 50px 1fr 1fr;
+  gap: 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #64748b;
+  text-align: center;
+  padding: 0 10px 8px 10px;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-/* Custom Types List Modern Styling */
-.custom-types-list {
-    background: #ffffff;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    border: 1px solid #f3f4f6;
-    overflow: hidden;
+.perday-row-modern {
+  display: grid;
+  grid-template-columns: 50px 1fr 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 4px 10px;
 }
 
-.custom-types-list .ct-list-header {
-    display: grid;
-    grid-template-columns: 3fr 1fr 100px;
-    gap: 16px;
+.perday-row-modern span {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.perday-row-modern input[type="time"] {
+  width: 100% !important;
+  max-width: 120px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  margin: 0 auto;
+  display: block;
+  height: 32px;
+}
+
+.btn-modern-primary:hover {
+    background: #1e293b;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+}
+
+/* Estilos de las Pildoras V/E */
+.ve-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Custom Type Checkboxes */
+.ct-checks-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 20px;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 15px;
+}
+
+.ct-check-row {
+    display: flex;
+    justify-content: space-between;
     align-items: center;
-    padding: 16px 24px;
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
-    
-    /* Typography */
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-weight: 600;
-    color: #6b7280;
-}
-
-.custom-types-list .ct-summary-row {
-    display: grid;
-    grid-template-columns: 3fr 1fr 100px;
-    gap: 16px;
-    align-items: center;
-    padding: 16px 24px;
-    border-bottom: 1px solid #f3f4f6;
+    padding: 8px 4px;
+    cursor: pointer;
+    border-radius: 6px;
     transition: background-color 0.2s;
 }
 
-.custom-types-list .ct-summary-row:last-child {
-    border-bottom: none;
+.ct-check-row:hover {
+    background-color: #f8fafc;
 }
 
-.custom-types-list .ct-summary-row:hover {
-    background-color: #f9fafb;
-}
-
-.custom-types-list .ct-summary-name {
-    font-weight: 500;
-    color: #111827;
-    font-size: 0.95rem;
-}
-
-.custom-types-list .ct-summary-code {
-    display: flex;
-    justify-content: center;
-}
-
-.custom-types-list .ct-summary-actions {
-    text-align: right;
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-}
-
-/* Circular Badges for Shift Codes */
-.badge-circle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    font-weight: 700;
+.ct-check-row span {
     font-size: 0.9rem;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    border: 2px solid white; /* Double border effect if bg is colored */
+    color: #475569;
+    font-weight: 500;
 }
 
-/* Action Buttons Styled as Ghost Circles */
-.ct-action-btn {
-    width: 36px;
-    height: 36px;
-    border: none;
-    background: transparent;
-    border-radius: 50%;
-    color: #9ca3af;
+.ct-check-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #0f172a;
+}
+
+.ve-item {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    padding: 0;
+    background: #f1f5f9;
+    padding: 4px 12px 4px 4px;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    width: fit-content;
+    border: 1px solid #e2e8f0;
 }
 
-.ct-action-btn:hover {
-    background: #f3f4f6;
-    color: #4b5563;
-}
-
-.ct-del-btn:hover {
-    background: #fee2e2;
-    color: #ef4444;
-}
-    border-color: #ffcccc;
-    color: #d32f2f;
-}
-
-/* Utility class for text acting as labels */
-.label-text {
-    display: block;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-    color: #2c3e50;
-}
-
-/* --- Shift Codes Edit Form Styles --- */
-
-.ct-edit-form {
+.ve-label {
+    width: 20px;
+    height: 20px;
     display: flex;
-    flex-direction: column;
-    gap: 20px;
-    padding: 10px 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: white;
+    font-weight: 700;
+    margin-right: 8px;
+    font-size: 0.7rem;
 }
 
-/* Styled Text Inputs */
+.ve-item:first-child .ve-label {
+    background: #14b2bf; /* Color UPA */
+}
+
+.ve-item:last-child .ve-label {
+    background: #64748b; /* Color Neutro */
+}
+
+.ve-value {
+    font-weight: 700;
+    color: #334155;
+}
+
+.ve-remain {
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+/* Corrección para la lista de Códigos de Turnos (Standard & Custom) */
+.ct-list-header, 
+.ct-summary-row {
+    display: grid;
+    grid-template-columns: 1fr 100px 80px;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 12px;
+}
+
+/* Missing style for Carpeta Médica (CM) */
+.turno-carpeta_medica {
+    background-color: #ffe7ba; /* Light Orange */
+    border: 1px solid #ffd591;
+    color: #d46b08;
+    font-weight: 600;
+}
+
+/* --- Nuevos Estilos para Corrección de UI (Custom Types & Botones) --- */
+
+/* Grid para inputs de Código e ID */
+.ct-inputs-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+/* Estilos para inputs redondeados */
 .ct-pill-input {
     width: 100%;
-    padding: 10px 12px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    font-size: 14px;
-    color: #374151;
-    background-color: #fff;
-    transition: all 0.2s;
-    box-sizing: border-box;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
 }
 
 .ct-pill-input:focus {
-    border-color: #3498db;
-    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
-    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-/* Grid Layouts */
-.ct-inputs-row {
-    display: grid;
-    grid-template-columns: 1fr 2fr;
-    gap: 20px;
+/* Botones Modernos */
+.btn-modern-primary {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
+.btn-modern-primary:hover {
+    background-color: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+}
+
+.btn-modern-secondary {
+    background-color: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+}
+
+.btn-modern-secondary:hover {
+    background-color: #e2e8f0;
+    color: #1e293b;
+}
+
+/* Botones de Icono (Acciones) */
+.btn-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background-color: transparent;
+    color: #64748b;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.btn-icon:hover {
+    background-color: #f1f5f9;
+    color: #1e293b;
+    border-color: #e2e8f0;
+}
+
+.ct-edit-btn:hover {
+    color: #3b82f6;
+    background-color: #eff6ff;
+    border-color: #bfdbfe;
+}
+
+.ct-del-btn:hover {
+    color: #ef4444;
+    background-color: #fef2f2;
+    border-color: #fecaca;
+}
+
+/* Color Picker Moderno */
 .ct-colors-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-    align-items: end;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+    background: #f8fafc;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
 }
 
-/* Color Inputs - Custom Styling to override browser default */
-.ct-color-input {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 50px;
-    height: 50px;
-    padding: 0;
-    border: none;
-    background: none;
+.color-picker-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+}
+
+.color-picker-group label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.color-input-wrapper {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    overflow: hidden;
+    position: relative;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #e2e8f0;
     cursor: pointer;
     transition: transform 0.2s;
-    vertical-align: middle;
 }
 
-.ct-color-input:hover {
-    transform: scale(1.05);
+.color-input-wrapper:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 2px #3b82f6;
 }
 
-.ct-color-input:focus {
-    outline: none;
+.color-input-swatch {
+    width: 100%;
+    height: 100%;
 }
 
-.ct-color-input::-webkit-color-swatch-wrapper {
+.color-input-control {
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+/* Header de Edición */
+.ct-edit-header {
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.ct-edit-header h4 {
+    margin: 0;
+    color: #1e293b;
+    font-size: 1.1rem;
+}
+
+/* Botones de Selección (L-V, SADOFE...) */
+.selection-btn-group {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.btn-selection {
+    padding: 6px 12px;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-selection:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+.btn-selection.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+}
+
+/* --- Grid de Acciones (Personal) --- */
+.actions-grid-container {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px;
+    width: fit-content;
+    margin: 0 auto;
+}
+
+.btn-action-icon {
+    width: 28px;
+    height: 28px;
     padding: 0;
-}
-
-.ct-color-input::-webkit-color-swatch {
-    border: 2px solid #ffffff;
-    border-radius: 10px;
-    box-shadow: 0 0 0 1px #d1d5db, 0 2px 5px rgba(0,0,0,0.1);
-}
-
-.ct-color-input::-moz-color-swatch {
-    border: 2px solid #ffffff;
-    border-radius: 10px;
-    box-shadow: 0 0 0 1px #d1d5db, 0 2px 5px rgba(0,0,0,0.1);
-}
-
-/* Preview Box Alignment */
-.ct-preview-box {
-    height: 50px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #f9fafb;
-    border: 1px dashed #d1d5db;
-    border-radius: 10px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: transparent;
 }
 
-/* Labels within form groups */
-.ct-edit-form label {
-    display: block;
-    font-weight: 500;
-    font-size: 0.9rem;
-    margin-bottom: 6px;
-    color: #4b5563;
+.btn-action-icon:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    background: transparent !important;
 }
 
-/* Checkbox Grid */
-.ct-checks-grid {
-    display: grid;
-    gap: 12px;
+/* Colores Específicos */
+.btn-move-up, .btn-move-down { 
+    color: #64748b; 
+    background: #f1f5f9; 
+}
+.btn-move-up:hover:not(:disabled), .btn-move-down:hover:not(:disabled) { 
+    background: #e2e8f0; 
+    color: #0f172a; 
+}
+
+.btn-edit { 
+    color: #3b82f6; 
+    background: #eff6ff; 
+}
+.btn-edit:hover { 
+    background: #dbeafe; 
+    border-color: #bfdbfe;
+}
+
+.btn-delete { 
+    color: #ef4444; 
+    background: #fef2f2; 
+}
+.btn-delete:hover { 
+    background: #fee2e2; 
+    border-color: #fecaca;
+}
+
+/* Ajustes para Clock Config y 24h */
+.clock-config, .clock-format {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     margin-top: 10px;
-    padding: 15px;
-    background: #f8f9fa;
-    border-radius: 8px;
-    border: 1px solid #eee;
 }
 
-.ct-checks-grid label {
+.clock-config input[type="checkbox"],
+.clock-format input[type="checkbox"] {
+    width: auto !important;
+    margin: 0;
+}
+
+.clock-edit {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+/* Corrección de alineación para Tipo de Horario */
+.schedule-type-toggle {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.radio-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    color: #334155;
+    /* Aseguramos que el contenido ocupe el espacio disponible si es necesario, pero aquí parece mejor compacto */
+    width: fit-content; 
+}
+
+.radio-card input[type="radio"] {
     margin: 0;
+    width: 18px;
+    height: 18px;
+    accent-color: #3b82f6;
     cursor: pointer;
 }
 
-.ct-checks-grid input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-}
-
-/* --- Mobile Optimization (Responsive Design) --- */
-
-@media screen and (max-width: 768px) {
-    /* Layout Adjustments */
-    body {
-        font-size: 14px; /* Slightly smaller base font */
-    }
-
-    .header-inner {
-        flex-direction: column;
-        gap: 1rem;
-        padding: 10px;
-    }
-
-    .logo-wrapper img, .logo-wrapper svg {
-        max-width: 100%;
-        height: auto;
-        max-height: 80px; /* Limit height on mobile */
-    }
-
-    /* Controls Section */
-    .controls {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 1rem;
-        padding: 10px;
-    }
-
-    .calendar-controls {
-        flex-direction: column;
-        align-items: center;
-        width: 100%;
-        gap: 12px;
-    }
-
-    .calendar-controls > div {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        width: 100%;
-        gap: 8px;
-    }
-    
-    /* Calendar Table Mobile */
-    .calendar-container {
-        height: calc(100vh - 220px); /* Maximize space */
-        border: none;
-        border-radius: 0;
-    }
-    
-    #calendar-table th, #calendar-table td {
-        min-width: 35px; /* Slightly smaller cells */
-        padding: 6px 2px;
-        font-size: 0.75rem;
-    }
-
-    /* Personal Table - Horizontal Scroll wrapper */
-    .personal-list-container {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-    
-    /* Form Adjustments */
-    .form-row {
-        flex-direction: column;
-        gap: 12px;
-    }
-    
-    .modern-form {
-        padding: 16px;
-    }
-    
-    /* Modals - Full width and optimized margins */
-    .modal-content, 
-    .modern-modal-content,
-    #personal-section .modal-content,
-    #stats-section .modal-content,
-    #movement-log-modal .modal-content {
-        width: 95% !important;
-        margin: 10px auto;
-        max-height: 95vh;
-        border-radius: 8px;
-    }
-    
-    /* Touch Targets Optimization */
-    button, 
-    select, 
-    input[type="text"], 
-    input[type="date"],
-    input[type="time"],
-    input[type="number"],
-    input[type="password"] {
-        min-height: 44px; /* Apple Human Interface Guidelines */
-    }
-    
-    /* Adjust specific buttons for touch */
-    .btn-modern-primary, 
-    .btn-primary, 
-    .btn-secondary, 
-    .btn-danger,
-    .btn-ghost {
-        padding: 12px 20px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }
-
-    /* Stack form actions on mobile for easier access */
-    .form-actions {
-        flex-direction: column;
-        gap: 12px;
-    }
-    
-    .form-actions button {
-        width: 100%;
-        margin-left: 0 !important;
-    }
-
-    /* Modal Specific Adjustments */
-    #turno-modal .horario-inputs {
-        flex-direction: column;
-    }
-    
-    .modal-header {
-        padding: 12px 16px;
-    }
-
-    .modal-header h2, .modal-header h3 {
-        font-size: 1.1rem;
-    }
-    
-    /* Stats Table Mobile */
-    #stats-table {
-        display: block;
-        overflow-x: auto;
-        white-space: nowrap;
-        -webkit-overflow-scrolling: touch;
-    }
-    
-    /* Workdays chips - ensure they wrap and are tappable */
-    .workdays.chips {
-        justify-content: center;
-        gap: 8px;
-    }
-    
-    .day-chip {
-        padding: 10px 14px; /* Larger touch target */
-        margin: 0;
-    }
-
-    /* Custom Type Settings Grid - Single Column */
-    #settings-modal .custom-types-list .header,
-    #settings-modal .custom-types-list .custom-type-row {
-        grid-template-columns: 1fr; /* Stack everything */
-        grid-template-rows: auto;
-        height: auto;
-        border-bottom: 2px solid #e2e8f0;
-        padding: 12px 0;
-    }
-
-    /* Hide header labels in grid if stacked, or adjust them */
-    #settings-modal .custom-types-list .header {
-        display: none; /* Hide header on mobile, use labels in rows if needed, or just context */
-    }
-
-    /* Re-layout custom type row items */
-    #settings-modal .custom-types-list .custom-type-row > * {
-        grid-column: 1 !important;
-        grid-row: auto !important;
-        justify-self: start !important;
-        width: 100%;
-    }
-
-    #settings-modal .custom-types-list .custom-type-row input {
-        width: 100%;
-    }
-}
-
-@media screen and (max-width: 480px) {
-    /* Extra Small Devices */
-    
-    /* Reduce padding further */
-    .modal-content {
-        padding: 0;
-    }
-    
-    .modern-form {
-        padding: 12px;
-    }
-
-    /* Calendar Controls - Stack tightly */
-    .calendar-controls {
-        gap: 8px;
-    }
-
-    #current-month {
-        font-size: 1rem;
-    }
+.radio-card-content {
+    font-size: 0.95rem;
 }

@@ -20,7 +20,7 @@
         <div class="header-inner">
             <div class="logo-wrapper">
                 <!-- Logo UPA16 como imagen PNG -->
-                <img src="logo/upa 16_.png" alt="Logo UPA16 Tres de Febrero - Emergencias" loading="lazy" width="460" height="auto" />
+                <img src="logo/upa 16_.png" alt="Logo UPA16 Tres de Febrero - Emergencias" />
             </div>
             <div class="header-title">
                 <span class="app-title">Sistema De Guardias</span>
@@ -35,32 +35,33 @@
             <button id="hamburger-btn" class="hamburger-btn" aria-label="Abrir menú">
                 <i class="fas fa-bars"></i>
             </button>
+        
+            <!-- Panel de menú hamburguesa -->
+            <div id="hamburger-menu" class="hamburger-menu" aria-hidden="true" inert>
+                <div class="menu-header">
+                    <span class="menu-title">Menú</span>
+                    <button id="close-menu-btn" class="close-menu-btn" aria-label="Cerrar menú"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="menu-content">
+                    <div id="session-info" class="session-info">
+                <span id="user-role-label">invitado</span>
+                        <button id="login-btn" class="btn-primary"><i class="fas fa-sign-in-alt"></i> Iniciar sesión</button>
+                        <button id="logout-btn" class="btn-secondary" style="display:none"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</button>
+                    </div>
+                    <div class="menu-actions">
+                        <button id="manage-personal-btn" class="btn-primary"><i class="fas fa-users"></i> Gestionar Personal</button>
+                        <button id="view-stats-btn" class="btn-info"><i class="fas fa-chart-bar"></i> Ver Estadísticas</button>
+                        <button id="export-data-btn" class="btn-info" style="display: none;"><i class="fas fa-file-export"></i> Exportar Datos</button>
+                        <button id="import-data-btn" class="btn-secondary" style="display: none;"><i class="fas fa-file-import"></i> Importar Datos</button>
+                        <button id="settings-btn" class="btn-info"><i class="fas fa-cog"></i> Configuraciones</button>
+                        
+                    </div>
+                </div>
+            </div>
         </div>
         
-        <!-- Panel de menú hamburguesa -->
-        <div id="hamburger-menu" class="hamburger-menu" aria-hidden="true" inert>
-            <div class="menu-header">
-                <span class="menu-title">Menú</span>
-                <button id="close-menu-btn" class="close-menu-btn" aria-label="Cerrar menú"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="menu-content">
-                <div id="session-info" class="session-info">
-            <span id="user-role-label">invitado</span>
-                    <button id="login-btn" class="btn-primary"><i class="fas fa-sign-in-alt"></i> Iniciar sesión</button>
-                    <button id="logout-btn" class="btn-secondary" style="display:none"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</button>
-                </div>
-                <div class="menu-actions">
-                    <button id="manage-personal-btn" class="btn-primary"><i class="fas fa-users"></i> Gestionar Personal</button>
-                    <button id="view-stats-btn" class="btn-info"><i class="fas fa-chart-bar"></i> Ver Estadísticas</button>
-                    <button id="export-data-btn" class="btn-info" style="display: none;"><i class="fas fa-file-export"></i> Exportar Datos</button>
-                    <button id="import-data-btn" class="btn-secondary" style="display: none;"><i class="fas fa-file-import"></i> Importar Datos</button>
-                    <button id="settings-btn" class="btn-info"><i class="fas fa-cog"></i> Configuraciones</button>
-                    
-                </div>
-            </div>
-        </div>
         <div id="menu-overlay" class="menu-overlay" aria-hidden="true" inert></div>
-        <input id="import-file-input" type="file" accept="application/json" style="display:none" aria-label="Importar archivo JSON" />
+        <input id="import-file-input" type="file" accept="application/json" style="display:none" />
 
         <section id="calendar-section">
             <div class="section-header">
@@ -216,8 +217,8 @@
                                 <button type="button" id="sync-device-time" class="btn-secondary">Sincronizar dispositivo</button>
                             </div>
                             <div class="clock-edit">
-                                <input type="date" id="settings-now-date" name="settings-now-date" aria-label="Fecha manual" />
-                                <input type="time" id="settings-now-time" name="settings-now-time" aria-label="Hora manual" />
+                                <input type="date" id="settings-now-date" name="settings-now-date" />
+                                <input type="time" id="settings-now-time" name="settings-now-time" />
                                 <input type="checkbox" id="use-custom-now" name="use-custom-now" />
                                 <label for="use-custom-now" class="inline">Usar fecha/hora manual</label>
                             </div>
@@ -246,8 +247,8 @@
                         <div class="add-user-form" style="border-top: 1px solid #eee; padding-top: 15px;">
                             <h4 style="margin-bottom: 10px;">Agregar Nuevo Usuario</h4>
                             <div class="form-group">
-                                <input type="text" id="new-user-username" placeholder="Nombre de usuario" aria-label="Nombre de nuevo usuario" />
-                                <input type="password" id="new-user-password" placeholder="Contraseña" aria-label="Contraseña de nuevo usuario" />
+                                <input type="text" id="new-user-username" placeholder="Nombre de usuario" />
+                                <input type="password" id="new-user-password" placeholder="Contraseña" />
                                 <button type="button" id="add-user-btn" class="btn-secondary">Crear Usuario</button>
                             </div>
                         </div>
@@ -300,12 +301,12 @@
                 <div class="input-group">
                     <!-- Icono usuario (SVG inline) -->
                     <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-4.418 0-8 2.239-8 5v2h16v-2c0-2.761-3.582-5-8-5z"/></svg>
-                    <input type="text" id="username" name="username" placeholder="Usuario" autocomplete="username" required aria-label="Usuario">
+                    <input type="text" id="username" name="username" placeholder="Usuario" autocomplete="username" required>
                 </div>
                 <div class="input-group">
                     <!-- Icono candado (SVG inline) -->
                     <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 00-5 5v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2h-1V7a5 5 0 00-5-5zm-3 8V7a3 3 0 116 0v3H9z"/></svg>
-                    <input type="password" id="password" name="password" placeholder="Contraseña" autocomplete="current-password" required aria-label="Contraseña">
+                    <input type="password" id="password" name="password" placeholder="Contraseña" autocomplete="current-password" required>
                 </div>
                 <button type="submit" class="btn-primary login-submit">Entrar</button>
                 <!-- Enlaces removidos por política: recuperación y creación de cuentas gestionadas externamente -->
@@ -426,7 +427,7 @@
                 <div class="form-section-divider">Configuración de Horario</div>
 
                 <div class="form-group">
-                    <span class="label-text">Días Laborables</span>
+                    <label>Días Laborables</label>
                     <div class="workdays chips" id="workdays-chips">
                         <label class="day-chip" data-day="1"><input type="checkbox" name="work-days" value="1" id="work-day-1"> L</label>
                         <label class="day-chip" data-day="2"><input type="checkbox" name="work-days" value="2" id="work-day-2"> M</label>
@@ -436,20 +437,20 @@
                         <label class="day-chip" data-day="6"><input type="checkbox" name="work-days" value="6" id="work-day-6"> S</label>
                         <label class="day-chip" data-day="0"><input type="checkbox" name="work-days" value="0" id="work-day-0"> D</label>
                     </div>
-                    <div class="workdays-presets">
-                        <button type="button" class="btn-xs btn-outline" id="preset-lv">L-V</button>
-                        <button type="button" class="btn-xs btn-outline" id="preset-sadofe">SADOFE</button>
-                        <button type="button" class="btn-xs btn-outline" id="preset-todos">Todos</button>
-                        <button type="button" class="btn-xs btn-outline" id="preset-nada">Ninguno</button>
-                    </div>
-                    <div class="checkbox-wrapper">
-                        <input type="checkbox" id="apply-holidays">
-                        <label for="apply-holidays">Aplicar también en feriados</label>
+                    <div class="selection-btn-group">
+                        <button type="button" class="btn-selection" id="preset-lv">L-V</button>
+                        <button type="button" class="btn-selection" id="preset-sadofe">SADOFE</button>
+                        <button type="button" class="btn-selection" id="preset-todos">Todos</button>
+                        <button type="button" class="btn-selection" id="preset-nada">Ninguno</button>
+                        <label class="apply-holidays-toggle" for="apply-holidays">
+                            <input type="checkbox" id="apply-holidays">
+                            <span>Aplicar en feriados</span>
+                        </label>
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <span class="label-text">Tipo de Horario</span>
+                    <label>Tipo de Horario</label>
                     <div class="schedule-type-toggle">
                         <label class="radio-card">
                             <input type="radio" name="schedule-type" id="schedule-type-fixed" checked>
@@ -463,13 +464,13 @@
                 </div>
 
                 <div id="schedule-fixed" class="schedule-block">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="schedule-start">Entrada</label>
+                    <div class="horario-inputs">
+                        <div class="horario-entrada">
+                            <label for="schedule-start">Entrada:</label>
                             <input type="time" id="schedule-start" name="schedule-start">
                         </div>
-                        <div class="form-group">
-                            <label for="schedule-end">Salida</label>
+                        <div class="horario-salida">
+                            <label for="schedule-end">Salida:</label>
                             <input type="time" id="schedule-end" name="schedule-end">
                         </div>
                     </div>
@@ -481,20 +482,20 @@
                             <span>Día</span><span>Entrada</span><span>Salida</span>
                         </div>
                         <!-- Rows generated via JS or manual? Manual in original -->
-                        <div class="perday-row-modern"><span>Lun</span><input type="time" id="per-start-1" aria-label="Hora entrada Lunes"><input type="time" id="per-end-1" aria-label="Hora salida Lunes"></div>
-                        <div class="perday-row-modern"><span>Mar</span><input type="time" id="per-start-2" aria-label="Hora entrada Martes"><input type="time" id="per-end-2" aria-label="Hora salida Martes"></div>
-                        <div class="perday-row-modern"><span>Mié</span><input type="time" id="per-start-3" aria-label="Hora entrada Miércoles"><input type="time" id="per-end-3" aria-label="Hora salida Miércoles"></div>
-                        <div class="perday-row-modern"><span>Jue</span><input type="time" id="per-start-4" aria-label="Hora entrada Jueves"><input type="time" id="per-end-4" aria-label="Hora salida Jueves"></div>
-                        <div class="perday-row-modern"><span>Vie</span><input type="time" id="per-start-5" aria-label="Hora entrada Viernes"><input type="time" id="per-end-5" aria-label="Hora salida Viernes"></div>
-                        <div class="perday-row-modern"><span>Sáb</span><input type="time" id="per-start-6" aria-label="Hora entrada Sábado"><input type="time" id="per-end-6" aria-label="Hora salida Sábado"></div>
-                        <div class="perday-row-modern"><span>Dom</span><input type="time" id="per-start-0" aria-label="Hora entrada Domingo"><input type="time" id="per-end-0" aria-label="Hora salida Domingo"></div>
+                        <div class="perday-row-modern"><span>Lun</span><input type="time" id="per-start-1"><input type="time" id="per-end-1"></div>
+                        <div class="perday-row-modern"><span>Mar</span><input type="time" id="per-start-2"><input type="time" id="per-end-2"></div>
+                        <div class="perday-row-modern"><span>Mié</span><input type="time" id="per-start-3"><input type="time" id="per-end-3"></div>
+                        <div class="perday-row-modern"><span>Jue</span><input type="time" id="per-start-4"><input type="time" id="per-end-4"></div>
+                        <div class="perday-row-modern"><span>Vie</span><input type="time" id="per-start-5"><input type="time" id="per-end-5"></div>
+                        <div class="perday-row-modern"><span>Sáb</span><input type="time" id="per-start-6"><input type="time" id="per-end-6"></div>
+                        <div class="perday-row-modern"><span>Dom</span><input type="time" id="per-start-0"><input type="time" id="per-end-0"></div>
                     </div>
                 </div>
 
                 <input type="hidden" id="personal-id">
                 
                 <div class="modal-footer">
-                    <button type="button" class="btn-ghost" id="cancel-btn">Cancelar</button>
+                    <button type="button" class="btn-modern-secondary" id="cancel-btn">Cancelar</button>
                     <button type="submit" class="btn-modern-primary">Guardar Cambios</button>
                 </div>
             </form>
@@ -649,6 +650,7 @@
     <!-- Librerías para exportar a PDF y Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="ui_components.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

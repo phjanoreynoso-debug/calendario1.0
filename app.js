@@ -876,10 +876,7 @@ function setupEventListeners() {
     // Exportación / Importación de datos
     if (exportDataBtn) {
         exportDataBtn.addEventListener('click', () => {
-            showNotification('Iniciando exportación de datos...');
-            setTimeout(() => {
-                exportAllData();
-            }, 50);
+            exportAllData();
         });
     }
     if (importDataBtn && importFileInput) {
@@ -896,11 +893,7 @@ function setupEventListeners() {
     // Exportar calendario a PDF
     if (downloadPdfBtn) {
         downloadPdfBtn.addEventListener('click', () => {
-            // Usar setTimeout para evitar bloquear el hilo principal durante el evento click
-            showNotification('Iniciando exportación...');
-            setTimeout(() => {
-                exportCalendarToPDF();
-            }, 50);
+            exportCalendarToPDF();
         });
     }
 
@@ -1256,58 +1249,45 @@ function renderPersonalList() {
             <td title="Vacaciones / Estrés">
                 <div class="ve-stats">
                     <div class="ve-item">
-                        <span class="ve-label">V:</span>
+                        <span class="ve-label">V</span>
                         <span class="ve-value" style="margin-right: 4px;">${vacUsados == null ? '-' : `${vacUsados} tomados`}</span>
                         <span class="ve-remain">${vacResto == null ? '-' : ` · ${vacResto} a favor`}</span>
                     </div>
                     <div class="ve-item">
-                        <span class="ve-label">E:</span>
+                        <span class="ve-label">E</span>
                         <span class="ve-value" style="margin-right: 4px;">${estUsados == null ? '-' : `${estUsados} tomados`}</span>
                         <span class="ve-remain">${estResto == null ? '-' : ` · ${estResto} a favor`}</span>
                     </div>
                 </div>
             </td>
-            <td class="actions-cell">
-                <div class="actions-cell-content">
-                    <div class="order-controls">
-                        <button class="order-btn up-btn" title="Subir" ${!canUp ? 'disabled' : ''}>▲</button>
-                        <button class="order-btn down-btn" title="Bajar" ${!canDown ? 'disabled' : ''}>▼</button>
-                    </div>
-                    <button class="btn-secondary edit-btn" data-id="${persona.id}" title="Editar">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn-danger delete-btn" data-id="${persona.id}" title="Eliminar">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </td>
         `;
+
+        // Use Modular UI Component for Actions
+        const actionsCell = document.createElement('td');
+        actionsCell.className = 'actions-cell';
+        
+        const handlers = {
+            onUp: (id) => {
+                movePersonalRow(id, 'up', isSadofe ? 'sadofe' : 'semana');
+                renderPersonalList();
+            },
+            onDown: (id) => {
+                movePersonalRow(id, 'down', isSadofe ? 'sadofe' : 'semana');
+                renderPersonalList();
+            },
+            onEdit: (id) => openPersonalModal(id),
+            onDelete: (id) => deletePersonal(id)
+        };
+
+        if (window.UIComponents && window.UIComponents.PersonalActions) {
+            const actionsContent = UIComponents.PersonalActions.render(persona.id, canUp, canDown, handlers);
+            actionsCell.appendChild(actionsContent);
+        } else {
+            console.error('UIComponents not loaded');
+        }
+        
+        row.appendChild(actionsCell);
         personalList.appendChild(row);
-
-        // Agregar event listeners a los botones
-        const upBtn = row.querySelector('.up-btn');
-        const downBtn = row.querySelector('.down-btn');
-        
-        if (upBtn) {
-            upBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                movePersonalRow(persona.id, 'up', isSadofe ? 'sadofe' : 'semana');
-                // Re-renderizar lista para actualizar botones
-                renderPersonalList();
-            });
-        }
-        
-        if (downBtn) {
-            downBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                movePersonalRow(persona.id, 'down', isSadofe ? 'sadofe' : 'semana');
-                // Re-renderizar lista para actualizar botones
-                renderPersonalList();
-            });
-        }
-
-        row.querySelector('.edit-btn').addEventListener('click', () => openPersonalModal(persona.id));
-        row.querySelector('.delete-btn').addEventListener('click', () => confirmDeletePersonal(persona.id));
     });
     populateCompaneroSelect();
 }
@@ -1894,11 +1874,17 @@ function renderCalendar() {
             const turno = turnos[dateStr] && turnos[dateStr][persona.id];
             
             if (turno) {
-                const cellContent = document.createElement('div');
-                cellContent.classList.add('calendar-cell', `turno-${turno.tipo}`);
-                // Para cambios de guardia: aplicar estilo de guardia (celeste) en cobertura y devolución
+                // Determine effective visual type for styling (e.g. cover guards look like fixed guards)
+                let effectiveType = turno.tipo;
                 if (turno.tipo === 'cambios_guardia' && (turno.rolCG === 'cubre' || turno.rolCG === 'devuelve')) {
-                    cellContent.classList.add('turno-guardia_fija');
+                    effectiveType = 'guardia_fija';
+                }
+
+                const cellContent = document.createElement('div');
+                cellContent.classList.add('calendar-cell', `turno-${effectiveType}`);
+                
+                if (effectiveType !== turno.tipo) {
+                    cellContent.classList.add(`turno-${turno.tipo}`);
                 }
                 
                 // Calcular fecha inicio y fin del turno para autocompletado y estado activo
@@ -1992,7 +1978,7 @@ function renderCalendar() {
                     codigoElement.title = tituloTooltip;
                 }
                 cellContent.appendChild(codigoElement);
-                applyCustomStyleIfAny(cellContent, turno.tipo);
+                applyCustomStyleIfAny(cellContent, effectiveType);
                 
                 // Agregar información adicional para tipos específicos
                 if (turno.tipo === 'cambios_guardia') {
@@ -5017,6 +5003,28 @@ function getCodigoForTipo(tipo) {
     const ov = (s && s.codeMap && s.codeMap[tipo] && s.codeMap[tipo].code) ? s.codeMap[tipo].code : null;
     return ov || base[tipo] || '';
 }
+
+function getStyleForTipo(tipo) {
+    const s = getSettings();
+    // 1. Check if standard type has style in codeMap (legacy or specific save)
+    if (s && s.codeMap && s.codeMap[tipo] && s.codeMap[tipo].style) {
+        return s.codeMap[tipo].style;
+    }
+    // 2. Check custom types array
+    if (s && s.customTypes) {
+        const ct = s.customTypes.find(t => t.id === tipo);
+        if (ct && ct.style) return ct.style;
+    }
+    // 3. Check window.tempCustomTypes if we are in a session that hasn't saved yet but might be rendering? 
+    // Usually renderCalendar reads from saved settings or current state.
+    // But if we want real-time preview in calendar when editing settings (if that was a feature), we'd check temp.
+    // For now, stick to saved settings as renderCalendar is usually called after save.
+    
+    // 4. Default styles for standard types if not overridden in codeMap but defined in CSS?
+    // We don't need to return CSS classes here, we return *custom* overrides.
+    // If null is returned, CSS classes apply.
+    return null;
+}
 document.addEventListener('DOMContentLoaded', () => {
     const settingsBtn = document.getElementById('settings-btn');
     const settingsModal = document.getElementById('settings-modal');
@@ -5454,18 +5462,46 @@ function openSettingsModal() {
             // Colors
             const colorsDiv = document.createElement('div');
             colorsDiv.className = 'ct-colors-grid';
+
+            const createColorPicker = (label, prop, defaultVal) => {
+                const container = document.createElement('div');
+                container.className = 'color-picker-group';
+                
+                const lbl = document.createElement('label');
+                lbl.textContent = label;
+                container.appendChild(lbl);
+                
+                const wrapper = document.createElement('div');
+                wrapper.className = 'color-input-wrapper';
+                wrapper.title = 'Clic para cambiar color';
+                
+                const input = document.createElement('input');
+                input.type = 'color';
+                input.className = 'color-input-control';
+                input.value = st.style?.[prop] || defaultVal;
+                
+                const swatch = document.createElement('div');
+                swatch.className = 'color-input-swatch';
+                swatch.style.backgroundColor = input.value;
+                
+                input.oninput = (e) => {
+                    const val = e.target.value;
+                    if (!st.style) st.style = {};
+                    st.style[prop] = val;
+                    swatch.style.backgroundColor = val;
+                    updatePreview();
+                };
+                
+                wrapper.appendChild(swatch);
+                wrapper.appendChild(input);
+                container.appendChild(wrapper);
+                
+                return container;
+            };
             
-            const bgInp = document.createElement('input'); bgInp.type = 'color'; bgInp.value = st.style?.bg || '#eee';
-            bgInp.oninput = (e) => { if(!st.style) st.style={}; st.style.bg = e.target.value; updatePreview(); };
-            colorsDiv.appendChild(createField('Fondo', bgInp));
-            
-            const borderInp = document.createElement('input'); borderInp.type = 'color'; borderInp.value = st.style?.border || '#ccc';
-            borderInp.oninput = (e) => { if(!st.style) st.style={}; st.style.border = e.target.value; updatePreview(); };
-            colorsDiv.appendChild(createField('Borde', borderInp));
-            
-            const textInp = document.createElement('input'); textInp.type = 'color'; textInp.value = st.style?.text || '#333';
-            textInp.oninput = (e) => { if(!st.style) st.style={}; st.style.text = e.target.value; updatePreview(); };
-            colorsDiv.appendChild(createField('Texto', textInp));
+            colorsDiv.appendChild(createColorPicker('Fondo', 'bg', '#eee'));
+            colorsDiv.appendChild(createColorPicker('Borde', 'border', '#ccc'));
+            colorsDiv.appendChild(createColorPicker('Texto', 'text', '#333'));
 
             // Preview Group
             const previewGrp = document.createElement('div');
@@ -5485,7 +5521,7 @@ function openSettingsModal() {
 
             const doneBtn = document.createElement('button');
             doneBtn.type = 'button';
-            doneBtn.className = 'btn-primary';
+            doneBtn.className = 'btn-modern-primary';
             doneBtn.textContent = 'Listo / Volver a lista';
             doneBtn.style.marginTop = '15px';
             doneBtn.onclick = () => renderSTList();
@@ -5509,221 +5545,315 @@ function openSettingsModal() {
         // Initialize temporary state for editing
         window.tempCustomTypes = JSON.parse(JSON.stringify(s.customTypes || []));
 
-        // Function to render the summary list
-        const renderCTList = () => {
-            list.innerHTML = '';
-            
-            // Simplified Header
-            const header = document.createElement('div');
-            header.className = 'ct-list-header';
-            header.innerHTML = '<span>Nombre visible</span><span style="text-align:center">Código</span><span style="text-align:right">Acciones</span>';
-            list.appendChild(header);
+        /**
+         * Manager for Custom Shift Types
+         * Handles rendering, editing, and state management for custom types.
+         */
+        const CustomTypeManager = {
+            /**
+             * Creates a standardized form group with label and input
+             * @param {string} labelText - The text for the label
+             * @param {HTMLElement} inputElement - The input DOM element
+             * @returns {HTMLDivElement} The container div
+             */
+            createFormGroup: (labelText, inputElement) => {
+                const group = document.createElement('div');
+                group.className = 'form-group';
+                
+                const label = document.createElement('label');
+                label.textContent = labelText;
+                
+                group.appendChild(label);
+                group.appendChild(inputElement);
+                return group;
+            },
 
-            if (window.tempCustomTypes.length === 0) {
-                const empty = document.createElement('div');
-                empty.className = 'ct-empty';
-                empty.textContent = 'No hay tipos personalizados.';
-                list.appendChild(empty);
-            }
+            /**
+             * Creates an action button with icon
+             * @param {string} iconClass - FontAwesome class (e.g., 'fa-cog')
+             * @param {string} title - Tooltip text
+             * @param {Function} onClick - Click handler
+             * @returns {HTMLButtonElement}
+             */
+            createActionButton: (iconClass, title, onClick) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn-icon'; // Uses new hover styles in styles_fixes.css
+                btn.title = title;
+                btn.innerHTML = `<i class="fas ${iconClass}"></i>`;
+                btn.onclick = onClick;
+                return btn;
+            },
 
-            window.tempCustomTypes.forEach((ct, index) => {
-                const row = document.createElement('div');
-                row.className = 'ct-summary-row';
+            /**
+             * Renders the summary list of custom types
+             */
+            renderList: () => {
+                list.innerHTML = '';
                 
-                const nameSpan = document.createElement('span');
-                nameSpan.className = 'ct-summary-name';
-                nameSpan.textContent = ct.name || ct.id || '(Sin nombre)';
+                // Header
+                const header = document.createElement('div');
+                header.className = 'ct-list-header';
+                header.innerHTML = `
+                    <span>Nombre visible</span>
+                    <span>Código</span>
+                    <span style="text-align:right">Acciones</span>
+                `;
+                list.appendChild(header);
+
+                // Empty State
+                if (window.tempCustomTypes.length === 0) {
+                    const emptyState = document.createElement('div');
+                    emptyState.className = 'ct-empty';
+                    emptyState.textContent = 'No hay tipos personalizados configurados.';
+                    list.appendChild(emptyState);
+                }
+
+                // Render Items
+                window.tempCustomTypes.forEach((type, index) => {
+                    const row = document.createElement('div');
+                    row.className = 'ct-summary-row';
+                    
+                    // Name
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = 'ct-summary-name';
+                    nameSpan.textContent = type.name || type.id || '(Sin nombre)';
+                    
+                    // Code (Badge)
+                    const codeSpan = document.createElement('span');
+                    codeSpan.className = 'ct-summary-code';
+                    if (type.code) {
+                        const badge = document.createElement('span');
+                        badge.className = 'badge';
+                        badge.textContent = type.code;
+                        Object.assign(badge.style, {
+                            backgroundColor: type.style?.bg || '#eee',
+                            color: type.style?.text || '#000',
+                            border: `1px solid ${type.style?.border || '#ccc'}`
+                        });
+                        codeSpan.appendChild(badge);
+                    } else {
+                        codeSpan.textContent = '-';
+                    }
+
+                    // Actions
+                    const actionsDiv = document.createElement('div');
+                    actionsDiv.className = 'ct-summary-actions';
+                    
+                    const editBtn = CustomTypeManager.createActionButton('fa-cog', 'Configurar', () => CustomTypeManager.renderEditForm(index));
+                    editBtn.classList.add('ct-edit-btn');
+                    
+                    const delBtn = CustomTypeManager.createActionButton('fa-trash', 'Eliminar', () => CustomTypeManager.confirmDelete(index));
+                    delBtn.classList.add('ct-del-btn');
+
+                    actionsDiv.appendChild(editBtn);
+                    actionsDiv.appendChild(delBtn);
+                    
+                    row.appendChild(nameSpan);
+                    row.appendChild(codeSpan);
+                    row.appendChild(actionsDiv);
+                    list.appendChild(row);
+                });
+
+                // Update global "Add" button behavior
+                const addBtn = document.getElementById('add-custom-type');
+                if (addBtn) {
+                    addBtn.style.display = 'inline-flex';
+                    addBtn.onclick = () => {
+                        const newType = { 
+                            id: '', 
+                            name: '', 
+                            code: '', 
+                            style: { bg: '#f3f4f6', border: '#e5e7eb', text: '#374151' }, 
+                            requireTime: false, 
+                            requireDateRange: false 
+                        };
+                        window.tempCustomTypes.push(newType);
+                        CustomTypeManager.renderEditForm(window.tempCustomTypes.length - 1);
+                    };
+                }
+            },
+
+            /**
+             * Handles deletion with confirmation
+             */
+            confirmDelete: (index) => {
+                showConfirmModal({
+                    title: 'Eliminar tipo',
+                    message: '¿Está seguro de eliminar este tipo personalizado?',
+                    onAccept: () => {
+                        window.tempCustomTypes.splice(index, 1);
+                        CustomTypeManager.renderList();
+                    }
+                });
+            },
+
+            /**
+             * Renders the edit form for a specific type
+             */
+            renderEditForm: (index) => {
+                list.innerHTML = '';
+                const typeData = window.tempCustomTypes[index];
                 
-                const codeSpan = document.createElement('span');
-                codeSpan.className = 'ct-summary-code';
-                // Use border-color so CSS can control width/style if needed, but respect user color
-                codeSpan.innerHTML = ct.code ? `<span class="badge-circle" style="background:${ct.style?.bg||'#eee'};color:${ct.style?.text||'#000'};border-color:${ct.style?.border||'#ccc'}">${ct.code}</span>` : '-';
-                
-                const actionsDiv = document.createElement('div');
-                actionsDiv.className = 'ct-summary-actions';
-                
-                const editBtn = document.createElement('button');
-                editBtn.type = 'button';
-                editBtn.className = 'ct-action-btn ct-edit-btn';
-                editBtn.innerHTML = '<i class="fas fa-cog"></i>';
-                editBtn.title = 'Configurar';
-                editBtn.onclick = () => renderCTEdit(index);
-                
-                const delBtn = document.createElement('button');
-                delBtn.type = 'button';
-                delBtn.className = 'ct-action-btn ct-del-btn';
-                delBtn.innerHTML = '<i class="fas fa-trash"></i>';
-                delBtn.title = 'Eliminar';
-                delBtn.onclick = () => {
-                    showConfirmModal({
-                        title: 'Eliminar tipo',
-                        message: '¿Está seguro de eliminar este tipo personalizado?',
-                        onAccept: () => {
-                            window.tempCustomTypes.splice(index, 1);
-                            renderCTList();
-                        }
+                // Edit Header
+                const editHeader = document.createElement('div');
+                editHeader.className = 'ct-edit-header';
+                editHeader.innerHTML = `<h4>Editando: ${typeData.name || 'Nuevo Tipo'}</h4>`;
+                list.appendChild(editHeader);
+
+                const formContainer = document.createElement('div');
+                formContainer.className = 'ct-edit-form';
+
+                // -- Name Field --
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.className = 'ct-pill-input ct-pill-name';
+                nameInput.value = typeData.name || '';
+                nameInput.placeholder = 'Nombre visible';
+                nameInput.oninput = (e) => typeData.name = e.target.value;
+                formContainer.appendChild(CustomTypeManager.createFormGroup('Nombre visible:', nameInput));
+
+                // -- Preview Badge --
+                const previewBadge = document.createElement('span');
+                previewBadge.className = 'badge';
+                const updatePreview = () => {
+                    previewBadge.textContent = typeData.code || 'CODE';
+                    Object.assign(previewBadge.style, {
+                        backgroundColor: typeData.style?.bg || '#f3f4f6',
+                        color: typeData.style?.text || '#374151',
+                        border: `1px solid ${typeData.style?.border || '#e5e7eb'}`
                     });
                 };
+                updatePreview();
 
-                actionsDiv.appendChild(editBtn);
-                actionsDiv.appendChild(delBtn);
-                
-                row.appendChild(nameSpan);
-                row.appendChild(codeSpan);
-                row.appendChild(actionsDiv);
-                list.appendChild(row);
-            });
-            
-            // Show "Add" button, Hide "Back" button (if any logic needed)
-            const addBtn = document.getElementById('add-custom-type');
-            if (addBtn) {
-                addBtn.style.display = 'inline-flex';
-                addBtn.onclick = () => {
-                    const newType = { id: '', name: '', code: '', style: { bg:'#f3f4f6', border:'#e5e7eb', text:'#374151' }, requireTime: false, requireDateRange: false };
-                    window.tempCustomTypes.push(newType);
-                    renderCTEdit(window.tempCustomTypes.length - 1);
+                // -- Code & ID Row --
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'ct-inputs-row'; // Grid layout from styles_fixes.css
+
+                const codeInput = document.createElement('input');
+                codeInput.type = 'text';
+                codeInput.className = 'ct-pill-input ct-pill-code';
+                codeInput.value = typeData.code || '';
+                codeInput.placeholder = 'Código';
+                codeInput.oninput = (e) => {
+                    typeData.code = e.target.value;
+                    updatePreview();
                 };
+
+                const idInput = document.createElement('input');
+                idInput.type = 'text';
+                idInput.className = 'ct-pill-input ct-pill-id';
+                idInput.value = typeData.id || '';
+                idInput.placeholder = 'ej: permiso_especial';
+                idInput.oninput = (e) => typeData.id = sanitizeTypeId(e.target.value);
+
+                rowDiv.appendChild(CustomTypeManager.createFormGroup('Código:', codeInput));
+                rowDiv.appendChild(CustomTypeManager.createFormGroup('ID (Identificador único):', idInput));
+                formContainer.appendChild(rowDiv);
+
+                // -- Color Pickers --
+                const colorsDiv = document.createElement('div');
+                colorsDiv.className = 'ct-colors-grid';
+
+                const createColorPicker = (label, prop, defaultVal) => {
+                    const container = document.createElement('div');
+                    container.className = 'color-picker-group';
+                    
+                    const lbl = document.createElement('label');
+                    lbl.textContent = label;
+                    container.appendChild(lbl);
+                    
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'color-input-wrapper';
+                    wrapper.title = 'Clic para cambiar color';
+                    
+                    const input = document.createElement('input');
+                    input.type = 'color';
+                    input.className = 'color-input-control';
+                    input.value = typeData.style?.[prop] || defaultVal;
+                    
+                    const swatch = document.createElement('div');
+                    swatch.className = 'color-input-swatch';
+                    swatch.style.backgroundColor = input.value;
+                    
+                    input.oninput = (e) => {
+                        const val = e.target.value;
+                        if (!typeData.style) typeData.style = {};
+                        typeData.style[prop] = val;
+                        swatch.style.backgroundColor = val;
+                        updatePreview();
+                    };
+                    
+                    wrapper.appendChild(swatch);
+                    wrapper.appendChild(input);
+                    container.appendChild(wrapper);
+                    
+                    return container;
+                };
+
+                colorsDiv.appendChild(createColorPicker('Fondo', 'bg', '#f3f4f6'));
+                colorsDiv.appendChild(createColorPicker('Borde', 'border', '#e5e7eb'));
+                colorsDiv.appendChild(createColorPicker('Texto', 'text', '#374151'));
+
+                // Preview Box
+                const previewGroup = document.createElement('div');
+                previewGroup.className = 'form-group';
+                previewGroup.innerHTML = '<label>Vista previa</label>';
+                const previewBox = document.createElement('div');
+                previewBox.style.cssText = 'height: 36px; display: flex; align-items: center;';
+                previewBox.appendChild(previewBadge);
+                previewGroup.appendChild(previewBox);
+                colorsDiv.appendChild(previewGroup);
+                
+                formContainer.appendChild(colorsDiv);
+
+                // -- Options Checkboxes --
+                const checksDiv = document.createElement('div');
+                checksDiv.className = 'ct-checks-grid';
+
+                const createCheckbox = (label, prop) => {
+                    const labelEl = document.createElement('label');
+                    labelEl.className = 'ct-check-row';
+                    
+                    const span = document.createElement('span');
+                    span.textContent = label;
+                    
+                    const input = document.createElement('input');
+                    input.type = 'checkbox';
+                    input.checked = !!typeData[prop];
+                    input.onchange = (e) => typeData[prop] = e.target.checked;
+                    
+                    // Order: Text left, Checkbox right
+                    labelEl.appendChild(span);
+                    labelEl.appendChild(input);
+                    
+                    return labelEl;
+                };
+
+                checksDiv.appendChild(createCheckbox('Requerir Hora (Entrada/Salida)', 'requireTime'));
+                checksDiv.appendChild(createCheckbox('Requerir Rango de Fechas', 'requireDateRange'));
+                
+                formContainer.appendChild(checksDiv);
+
+                // -- Done Button --
+                const doneBtn = document.createElement('button');
+                doneBtn.type = 'button';
+                doneBtn.className = 'btn-modern-primary'; // Modern button style
+                doneBtn.textContent = 'Listo / Volver a lista';
+                doneBtn.style.marginTop = '15px';
+                doneBtn.onclick = () => CustomTypeManager.renderList();
+                
+                formContainer.appendChild(doneBtn);
+                list.appendChild(formContainer);
+
+                // Hide main "Add" button
+                const addBtn = document.getElementById('add-custom-type');
+                if (addBtn) addBtn.style.display = 'none';
             }
         };
 
-        // Function to render the edit form for a single item
-        const renderCTEdit = (index) => {
-            list.innerHTML = '';
-            const ct = window.tempCustomTypes[index];
-            
-            // Edit Header
-            const editHeader = document.createElement('div');
-            editHeader.className = 'ct-edit-header';
-            editHeader.innerHTML = `<h4>Editando: ${ct.name || 'Nuevo Tipo'}</h4>`;
-            list.appendChild(editHeader);
-
-            // Edit Form Container
-            const formContainer = document.createElement('div');
-            formContainer.className = 'ct-edit-form';
-
-            // Fields helper
-            const createField = (label, input) => {
-                const grp = document.createElement('div');
-                grp.className = 'form-group';
-                const lbl = document.createElement('label');
-                lbl.textContent = label;
-                
-                // Fix accessibility: ensure input has ID and label points to it
-                if (!input.id) {
-                    input.id = 'ct-field-' + Math.random().toString(36).substr(2, 9);
-                }
-                lbl.htmlFor = input.id;
-
-                grp.appendChild(lbl);
-                grp.appendChild(input);
-                return grp;
-            };
-
-            // Name (First for better UX)
-            const nameInp = document.createElement('input'); nameInp.type = 'text'; nameInp.value = ct.name || ''; nameInp.placeholder = 'Nombre visible';
-            nameInp.className = 'ct-pill-input ct-pill-name';
-            nameInp.oninput = (e) => ct.name = e.target.value;
-            formContainer.appendChild(createField('Nombre visible:', nameInp));
-
-            // Preview Badge Element (created early for scope access)
-            const previewBadge = document.createElement('span');
-            previewBadge.className = 'badge-circle';
-            
-            const updatePreview = () => {
-                previewBadge.textContent = ct.code || 'CODE';
-                previewBadge.style.backgroundColor = ct.style?.bg || '#f3f4f6';
-                previewBadge.style.color = ct.style?.text || '#374151';
-                previewBadge.style.border = `1px solid ${ct.style?.border || '#e5e7eb'}`;
-            };
-            updatePreview();
-
-            // Row for Code and ID
-            const rowDiv = document.createElement('div');
-            rowDiv.className = 'ct-inputs-row';
-
-            // Code (Short)
-            const codeInp = document.createElement('input'); codeInp.type = 'text'; codeInp.value = ct.code || ''; codeInp.placeholder = 'Código';
-            codeInp.className = 'ct-pill-input ct-pill-code';
-            codeInp.oninput = (e) => { ct.code = e.target.value; updatePreview(); };
-            rowDiv.appendChild(createField('Código:', codeInp));
-
-            // ID (Technical)
-            const idInp = document.createElement('input'); idInp.type = 'text'; idInp.value = ct.id || ''; idInp.placeholder = 'ej: permiso_especial';
-            idInp.className = 'ct-pill-input ct-pill-id';
-            idInp.oninput = (e) => ct.id = sanitizeTypeId(e.target.value);
-            rowDiv.appendChild(createField('ID (Identificador único):', idInp));
-            
-            formContainer.appendChild(rowDiv);
-
-            // Colors
-            const colorsDiv = document.createElement('div');
-            colorsDiv.className = 'ct-colors-grid';
-            
-            const bgInp = document.createElement('input'); bgInp.type = 'color'; bgInp.value = ct.style?.bg || '#f3f4f6';
-            bgInp.className = 'ct-color-input';
-            bgInp.oninput = (e) => { if(!ct.style) ct.style={}; ct.style.bg = e.target.value; updatePreview(); };
-            colorsDiv.appendChild(createField('Fondo', bgInp));
-            
-            const borderInp = document.createElement('input'); borderInp.type = 'color'; borderInp.value = ct.style?.border || '#e5e7eb';
-            borderInp.className = 'ct-color-input';
-            borderInp.oninput = (e) => { if(!ct.style) ct.style={}; ct.style.border = e.target.value; updatePreview(); };
-            colorsDiv.appendChild(createField('Borde', borderInp));
-            
-            const textInp = document.createElement('input'); textInp.type = 'color'; textInp.value = ct.style?.text || '#374151';
-            textInp.className = 'ct-color-input';
-            textInp.oninput = (e) => { if(!ct.style) ct.style={}; ct.style.text = e.target.value; updatePreview(); };
-            colorsDiv.appendChild(createField('Texto', textInp));
-
-            // Preview Group
-            const previewGrp = document.createElement('div');
-            previewGrp.className = 'form-group';
-            const previewLbl = document.createElement('label');
-            previewLbl.textContent = 'Vista previa';
-            const previewBox = document.createElement('div');
-            previewBox.className = 'ct-preview-box';
-            previewBox.appendChild(previewBadge);
-            previewGrp.appendChild(previewLbl);
-            previewGrp.appendChild(previewBox);
-            colorsDiv.appendChild(previewGrp);
-            
-            formContainer.appendChild(colorsDiv);
-
-            // Checkboxes
-            const checksDiv = document.createElement('div');
-            checksDiv.className = 'ct-checks-grid';
-            
-            const timeLbl = document.createElement('label');
-            const timeCk = document.createElement('input'); timeCk.type = 'checkbox'; timeCk.checked = !!ct.requireTime;
-            timeCk.onchange = (e) => ct.requireTime = e.target.checked;
-            timeLbl.appendChild(timeCk); timeLbl.append(' Requerir Hora (Entrada/Salida)');
-            checksDiv.appendChild(timeLbl);
-            
-            const rangeLbl = document.createElement('label');
-            const rangeCk = document.createElement('input'); rangeCk.type = 'checkbox'; rangeCk.checked = !!ct.requireDateRange;
-            rangeCk.onchange = (e) => ct.requireDateRange = e.target.checked;
-            rangeLbl.appendChild(rangeCk); rangeLbl.append(' Requerir Rango de Fechas');
-            checksDiv.appendChild(rangeLbl);
-            
-            formContainer.appendChild(checksDiv);
-
-            // Done Button
-            const doneBtn = document.createElement('button');
-            doneBtn.type = 'button';
-            doneBtn.className = 'btn-primary';
-            doneBtn.textContent = 'Listo / Volver a lista';
-            doneBtn.style.marginTop = '15px';
-            doneBtn.onclick = () => renderCTList();
-            
-            formContainer.appendChild(doneBtn);
-            list.appendChild(formContainer);
-
-            // Hide "Add" button while editing
-            const addBtn = document.getElementById('add-custom-type');
-            if (addBtn) addBtn.style.display = 'none';
-        };
-
-        // Initial render
-        renderCTList();
+        // Initialize
+        CustomTypeManager.renderList();
     }
 
     const customCodesContainer = document.getElementById('custom-codes-rows');

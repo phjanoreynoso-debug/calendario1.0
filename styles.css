@@ -904,8 +904,8 @@ body.modal-open {
 }
 
 #personal-section .modal-content {
-    max-width: 800px; /* Mantener tamaño grande para modales de gestión */
-    width: 90%;
+    max-width: 1100px; /* Aumentado para mejor visualización de la tabla */
+    width: 95%;
 }
 
 #stats-section .modal-content {
