@@ -26,27 +26,54 @@
     flex-grow: 1;
 }
 
-/* Custom Types List Desktop Defaults */
-.custom-types-list .ct-list-header,
+/* Custom Types List Modern Styling */
+.custom-types-list {
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    border: 1px solid #f3f4f6;
+    overflow: hidden;
+}
+
+.custom-types-list .ct-list-header {
+    display: grid;
+    grid-template-columns: 3fr 1fr 100px;
+    gap: 16px;
+    align-items: center;
+    padding: 16px 24px;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    
+    /* Typography */
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    color: #6b7280;
+}
+
 .custom-types-list .ct-summary-row {
     display: grid;
     grid-template-columns: 3fr 1fr 100px;
     gap: 16px;
     align-items: center;
-    padding: 12px 20px;
-    border-bottom: 1px solid #eee;
+    padding: 16px 24px;
+    border-bottom: 1px solid #f3f4f6;
+    transition: background-color 0.2s;
 }
 
-.custom-types-list .ct-list-header {
-    font-weight: 600;
-    background: #fafafa;
-    border-radius: 6px 6px 0 0;
-    color: #424242;
-    border-bottom: 2px solid #f0f0f0;
+.custom-types-list .ct-summary-row:last-child {
+    border-bottom: none;
 }
 
 .custom-types-list .ct-summary-row:hover {
-    background-color: #f8f9fa;
+    background-color: #f9fafb;
+}
+
+.custom-types-list .ct-summary-name {
+    font-weight: 500;
+    color: #111827;
+    font-size: 0.95rem;
 }
 
 .custom-types-list .ct-summary-code {
@@ -66,22 +93,23 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    font-weight: 600;
-    font-size: 0.85rem;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    font-weight: 700;
+    font-size: 0.9rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border: 2px solid white; /* Double border effect if bg is colored */
 }
 
-/* Action Buttons Styled as Boxed Icons */
+/* Action Buttons Styled as Ghost Circles */
 .ct-action-btn {
-    width: 32px;
-    height: 32px;
-    border: 1px solid #ddd;
-    background: white;
-    border-radius: 4px;
-    color: #555;
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: transparent;
+    border-radius: 50%;
+    color: #9ca3af;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -91,13 +119,14 @@
 }
 
 .ct-action-btn:hover {
-    background: #f0f0f0;
-    border-color: #ccc;
-    color: #333;
+    background: #f3f4f6;
+    color: #4b5563;
 }
 
 .ct-del-btn:hover {
-    background: #fff0f0;
+    background: #fee2e2;
+    color: #ef4444;
+}
     border-color: #ffcccc;
     color: #d32f2f;
 }

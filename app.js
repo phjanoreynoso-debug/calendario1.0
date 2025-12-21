@@ -5536,7 +5536,8 @@ function openSettingsModal() {
                 
                 const codeSpan = document.createElement('span');
                 codeSpan.className = 'ct-summary-code';
-                codeSpan.innerHTML = ct.code ? `<span class="badge-circle" style="background:${ct.style?.bg||'#eee'};color:${ct.style?.text||'#000'};border:1px solid ${ct.style?.border||'#ccc'}">${ct.code}</span>` : '-';
+                // Use border-color so CSS can control width/style if needed, but respect user color
+                codeSpan.innerHTML = ct.code ? `<span class="badge-circle" style="background:${ct.style?.bg||'#eee'};color:${ct.style?.text||'#000'};border-color:${ct.style?.border||'#ccc'}">${ct.code}</span>` : '-';
                 
                 const actionsDiv = document.createElement('div');
                 actionsDiv.className = 'ct-summary-actions';
