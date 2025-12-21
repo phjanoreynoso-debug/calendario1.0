@@ -5516,7 +5516,7 @@ function openSettingsModal() {
             // Simplified Header
             const header = document.createElement('div');
             header.className = 'ct-list-header';
-            header.innerHTML = '<span>Nombre visible</span><span>Código</span><span style="text-align:right">Acciones</span>';
+            header.innerHTML = '<span>Nombre visible</span><span style="text-align:center">Código</span><span style="text-align:right">Acciones</span>';
             list.appendChild(header);
 
             if (window.tempCustomTypes.length === 0) {
@@ -5536,21 +5536,21 @@ function openSettingsModal() {
                 
                 const codeSpan = document.createElement('span');
                 codeSpan.className = 'ct-summary-code';
-                codeSpan.innerHTML = ct.code ? `<span class="badge" style="background:${ct.style?.bg||'#eee'};color:${ct.style?.text||'#000'};border:1px solid ${ct.style?.border||'#ccc'}">${ct.code}</span>` : '-';
+                codeSpan.innerHTML = ct.code ? `<span class="badge-circle" style="background:${ct.style?.bg||'#eee'};color:${ct.style?.text||'#000'};border:1px solid ${ct.style?.border||'#ccc'}">${ct.code}</span>` : '-';
                 
                 const actionsDiv = document.createElement('div');
                 actionsDiv.className = 'ct-summary-actions';
                 
                 const editBtn = document.createElement('button');
                 editBtn.type = 'button';
-                editBtn.className = 'btn-icon ct-edit-btn';
+                editBtn.className = 'ct-action-btn ct-edit-btn';
                 editBtn.innerHTML = '<i class="fas fa-cog"></i>';
                 editBtn.title = 'Configurar';
                 editBtn.onclick = () => renderCTEdit(index);
                 
                 const delBtn = document.createElement('button');
                 delBtn.type = 'button';
-                delBtn.className = 'btn-icon ct-del-btn';
+                delBtn.className = 'ct-action-btn ct-del-btn';
                 delBtn.innerHTML = '<i class="fas fa-trash"></i>';
                 delBtn.title = 'Eliminar';
                 delBtn.onclick = () => {
@@ -5626,7 +5626,7 @@ function openSettingsModal() {
 
             // Preview Badge Element (created early for scope access)
             const previewBadge = document.createElement('span');
-            previewBadge.className = 'badge';
+            previewBadge.className = 'badge-circle';
             
             const updatePreview = () => {
                 previewBadge.textContent = ct.code || 'CODE';
