@@ -45,7 +45,7 @@ function handleTipoTurnoChange() {
     
     hideAllConditionalFields();
     
-    const tiposSinHorario = ['vacaciones', 'estres', 'dia_estudio', 'ausente', 'compensatorio'];
+    const tiposSinHorario = ['vacaciones', 'estres', 'dia_estudio', 'ausente', 'compensatorio', 'vacio'];
     const s = getSettings();
     const cfg = getCustomTypeConfig(tipoTurno);
     const isCustom = !!cfg;
@@ -439,6 +439,13 @@ function closeHamburgerMenu() {
 document.addEventListener('DOMContentLoaded', () => {
     loadSession(); // Load session first to determine currentUser
     loadData();    // Then load data (which depends on currentUser)
+
+    // Ejecutar inmediatamente al cargar la página (chequeo completo para recuperar días perdidos)
+    // Es IMPORTANTE hacerlo después de loadData() para no sobrescribir cambios manuales
+    autoMarkScheduledShifts(true);
+
+    // Ejecutar cada 5 segundos para actualización "instantánea" (solo chequea el día de hoy)
+    setInterval(() => autoMarkScheduledShifts(false), 5000);
     updateSessionUI();
     setupEventListeners();
     // Mostrar mensajes de cierre previo si aplica
@@ -1873,7 +1880,9 @@ function renderCalendar() {
             // Verificar si hay un turno asignado para esta persona en esta fecha
             const turno = turnos[dateStr] && turnos[dateStr][persona.id];
             
-            if (turno) {
+            // Si el turno es explícitamente 'vacio', no lo renderizamos visualmente (queda como hueco),
+            // pero el objeto existe para prevenir la recreación automática.
+            if (turno && turno.tipo !== 'vacio') {
                 // Determine effective visual type for styling (e.g. cover guards look like fixed guards)
                 let effectiveType = turno.tipo;
                 if (turno.tipo === 'cambios_guardia' && (turno.rolCG === 'cubre' || turno.rolCG === 'devuelve')) {
@@ -2216,11 +2225,7 @@ function startAlignedMinuteChecker() {
     // setInterval(autoMarkScheduledShifts, 60000);
 }
 
-// Ejecutar inmediatamente al cargar la página (chequeo completo para recuperar días perdidos)
-autoMarkScheduledShifts(true);
 
-// Ejecutar cada 5 segundos para actualización "instantánea" (solo chequea el día de hoy)
-setInterval(() => autoMarkScheduledShifts(false), 5000);
 
 // Exportar calendario a PDF
 async function exportCalendarToPDF() {
@@ -2368,6 +2373,9 @@ async function exportCalendarToPDF() {
                                     const extra = `Inicio: ${formatDateShort(start)} — Regreso: ${formatDateShort(end)}`;
                                     finalText = obsText ? `${obsText}\n${extra}` : extra;
                                 }
+                            } else if (tipoTurno === 'vacio') {
+                                // No incluir turnos vacíos en el reporte de observaciones
+                                include = false;
                             } else {
                                 // Incluir otros tipos siempre, aunque no haya observación
                                 include = true;
@@ -2623,6 +2631,14 @@ function openTurnoModal(personalId, fecha, turno = null) {
         const currentValue = tipoTurnoSelect.value;
         const baseTypes = ['guardia_fija','ausente','carpeta_medica','vacaciones','compensatorio','estres','cambios_guardia','articulo26','dia_sindical','dia_estudio'];
         tipoTurnoSelect.innerHTML = '';
+        
+        // Opción Vacío para limpiar turno
+        const emptyOpt = document.createElement('option');
+        emptyOpt.value = 'vacio';
+        emptyOpt.textContent = 'Vacío (Limpiar)';
+        emptyOpt.style.color = '#dc3545'; // Rojo para indicar acción destructiva/limpieza
+        tipoTurnoSelect.appendChild(emptyOpt);
+
         baseTypes.forEach(t => {
             const opt = document.createElement('option');
             opt.value = t;
@@ -2830,6 +2846,28 @@ function handleTurnoSubmit(e) {
     const observaciones = document.getElementById('turno-observaciones').value;
     const prevTurno = (turnos[fecha] && turnos[fecha][personalId]) ? turnos[fecha][personalId] : null;
     
+    // Manejo de opción 'vacío' para eliminar turno
+    if (tipo === 'vacio') {
+        if (!turnos[fecha]) turnos[fecha] = {};
+        
+        // En lugar de borrar la entrada, la marcamos explícitamente como 'vacio'
+        // Esto evita que la generación automática de turnos (autoMarkScheduledShifts)
+        // vuelva a crear una guardia por defecto en este hueco.
+        turnos[fecha][personalId] = {
+            tipo: 'vacio',
+            observaciones: ''
+        };
+
+        saveData(); // Guardar cambios
+        renderCalendar(); // Actualizar vista
+        renderStats(); // Actualizar estadísticas
+        closeModal(document.getElementById('turno-modal'));
+        showNotification('Turno limpiado correctamente.');
+        
+        isSubmitting = false;
+        return;
+    }
+
     // Validar Artículo 26 si es necesario
     if (tipo === 'articulo26') {
         const validation = validateArticulo26(fecha, personalId);
