@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Sistema de Gestión de Personal - UPA 16</title>
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles_fixes.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Favicon (opcional) -->
+    <link rel="icon" sizes="32x32" href="logo/upa 16_.png">
+</head>
+<body>
+    <header>
+        <div class="header-inner">
+            <div class="logo-wrapper">
+                <!-- Logo UPA16 como imagen PNG -->
+                <img src="logo/upa 16_.png" alt="Logo UPA16 Tres de Febrero - Emergencias" />
+            </div>
+            <div class="header-title">
+                <span class="app-title">Sistema De Guardias</span>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="app-header">
+            <h2>Calendario de Turnos</h2>
+            <!-- Botón menú hamburguesa -->
+            <button id="hamburger-btn" class="hamburger-btn" aria-label="Abrir menú">
+                <i class="fas fa-bars"></i>
+            </button>
+        
+            <!-- Panel de menú hamburguesa -->
+            <div id="hamburger-menu" class="hamburger-menu" aria-hidden="true" inert>
+                <div class="menu-header">
+                    <span class="menu-title">Menú</span>
+                    <button id="close-menu-btn" class="close-menu-btn" aria-label="Cerrar menú"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="menu-content">
+                    <div id="session-info" class="session-info">
+                <span id="user-role-label">invitado</span>
+                        <button id="login-btn" class="btn-primary"><i class="fas fa-sign-in-alt"></i> Iniciar sesión</button>
+                        <button id="logout-btn" class="btn-secondary" style="display:none"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</button>
+                    </div>
+                    <div class="menu-actions">
+                        <button id="manage-personal-btn" class="btn-primary"><i class="fas fa-users"></i> Gestionar Personal</button>
+                        <button id="view-stats-btn" class="btn-info"><i class="fas fa-chart-bar"></i> Ver Estadísticas</button>
+                        <button id="export-data-btn" class="btn-info" style="display: none;"><i class="fas fa-file-export"></i> Exportar Datos</button>
+                        <button id="import-data-btn" class="btn-secondary" style="display: none;"><i class="fas fa-file-import"></i> Importar Datos</button>
+                        <button id="settings-btn" class="btn-info"><i class="fas fa-cog"></i> Configuraciones</button>
+                        
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="menu-overlay" class="menu-overlay" aria-hidden="true" inert></div>
+        <input id="import-file-input" type="file" accept="application/json" style="display:none" />
+
+        <section id="calendar-section" class="calendar-section" aria-label="Calendario de turnos">
+            <div class="section-header">
+                <div class="calendar-controls">
+                    <button id="prev-month" class="btn-secondary" type="button" title="Mes anterior" aria-label="Mes anterior"><i class="fas fa-chevron-left"></i></button>
+                    <span id="current-month" class="current-month-label">Mes Actual</span>
+                    <button id="next-month" class="btn-secondary" type="button" title="Mes siguiente" aria-label="Mes siguiente"><i class="fas fa-chevron-right"></i></button>
+                    <label for="sector-input" class="sector-label">Sector:</label>
+                    <input id="sector-input" type="text" placeholder="Ej: Sector" aria-label="Sector para el PDF" />
+                    <button type="button" id="help-btn" class="btn-secondary" title="Ayuda (?)" aria-label="Abrir ayuda"><i class="fas fa-question-circle"></i> Ayuda</button>
+                    <button id="download-pdf-btn" class="btn-info" type="button"><i class="fas fa-file-pdf"></i> Descargar PDF</button>
+                </div>
+            </div>
+            <div class="calendar-container">
+                <div class="calendar-scroll">
+                    <table id="calendar-table">
+                        <thead>
+                            <tr id="calendar-days">
+                                <th>Personal</th>
+                                <!-- Aquí se generarán dinámicamente los días del mes -->
+                            </tr>
+                        </thead>
+                        <tbody id="calendar-body">
+                            <!-- Aquí se generará dinámicamente la grilla de turnos -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Modal de personal -->
+        <div id="personal-section" class="modal">
+            <div class="modal-content">
+                <span id="close-personal-btn" class="close">&times;</span>
+                <div class="section-header">
+                    <h2>Personal</h2>
+                    <div>
+                        <button id="add-personal-btn" class="btn-modern-primary"><i class="fas fa-plus"></i> Agregar Personal</button>
+                    </div>
+                </div>
+
+                
+                <div class="personal-list-container">
+                    <table id="personal-table" class="modern-table">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Apellido</th>
+                                <th>Tipo de trabajo</th>
+                                <th>Turno preferente</th>
+                                <th>Vacaciones/Estrés</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="personal-list">
+                            <!-- Aquí se cargarán dinámicamente los registros de personal -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal de estadísticas -->
+        <div id="stats-section" class="modal">
+            <div class="modal-content">
+                <span id="close-stats-btn" class="close">&times;</span>
+                <div class="section-header">
+                    <h2>Estadísticas de Personal</h2>
+                    <div class="stats-controls">
+                        <!-- Botones de Logs Anuales y Reset Manual removidos a pedido -->
+                    </div>
+                </div>
+                <div class="stats-container">
+                    <div class="stats-tabs">
+                        <button id="current-stats-tab" class="tab-button active">Estadísticas Actuales</button>
+                        <button id="annual-logs-tab" class="tab-button">Logs Anuales</button>
+                        <button id="movement-logs-tab" class="tab-button">Movimientos</button>
+                    </div>
+                    
+                    <div id="current-stats-content" class="tab-content active">
+                        <div class="stats-search">
+                            <label for="stats-name-select" style="font-size:13px;color:#666;">Personal:</label>
+                            <select id="stats-name-select">
+                                <option value="">Seleccione personal</option>
+                            </select>
+                        </div>
+                        <table id="stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Personal</th>
+                                    <th>Guardias</th>
+                                    <th>Ausentes</th>
+                                    <th>Compensatorios</th>
+                                    <th>Estrés</th>
+                                    <th>Artículo 26</th>
+                                    <th>Vacaciones</th>
+                                    <th>Carpeta Médica</th>
+                                    <th>Cambios Guardia</th>
+                                    <th>Día Sindical</th>
+                                    <th>Día de Estudio</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stats-list">
+                                <!-- Aquí se cargarán dinámicamente las estadísticas -->
+                            </tbody>
+                        </table>
+                        <div id="stats-dates-record" class="stats-dates-record">
+                            <!-- Aquí se listarán las fechas por tipo (sin guardias) -->
+                        </div>
+                    </div>
+                    
+                    <div id="annual-logs-content" class="tab-content">
+                        <div class="logs-header">
+                            <h3>Historial de Estadísticas Anuales</h3>
+                            <p>Archivo de estadísticas de años anteriores</p>
+                        </div>
+                        <div id="annual-logs-list">
+                            <!-- Aquí se cargarán dinámicamente los logs anuales -->
+                        </div>
+                    </div>
+
+                    <div id="movement-logs-content" class="tab-content">
+                        <div class="logs-header">
+                            <h3>Logs de Movimientos</h3>
+                            <p>Registro de modificaciones realizadas</p>
+                            <div class="logs-filters">
+                                <label for="movement-log-personal-filter">Filtrar por Personal:</label>
+                                <select id="movement-log-personal-filter">
+                                    <option value="">Todos</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="movement-logs-list">
+                            <!-- Aquí se cargarán dinámicamente los logs de movimientos -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="settings-modal" class="modal" style="display:none">
+            <div class="modal-content">
+                <span id="close-settings-btn" class="close">&times;</span>
+                <div class="section-header">
+                    <h2>Configuraciones</h2>
+                </div>
+                <form id="settings-form">
+                    <div class="form-group">
+                        <label for="settings-timezone">Zona horaria:</label>
+                        <input type="text" id="settings-timezone" name="settings-timezone" placeholder="America/Argentina/Buenos_Aires" />
+                        <div id="clock-config" class="clock-config">
+                            <div class="clock-row">
+                                <span id="settings-current-clock" class="current-clock">--:--</span>
+                                <button type="button" id="sync-device-time" class="btn-secondary">Sincronizar dispositivo</button>
+                            </div>
+                            <div class="clock-edit">
+                                <input type="date" id="settings-now-date" name="settings-now-date" />
+                                <input type="time" id="settings-now-time" name="settings-now-time" />
+                                <input type="checkbox" id="use-custom-now" name="use-custom-now" />
+                                <label for="use-custom-now" class="inline">Usar fecha/hora manual</label>
+                            </div>
+                            <div class="clock-format">
+                                <input type="checkbox" id="force-24h" name="force-24h" />
+                                <label for="force-24h" class="inline">Formato 24 horas</label>
+                            </div>
+                        </div>
+                    </div>
+                    <fieldset class="form-group" id="user-management-section" style="display:none;">
+                        <legend>Gestión de Usuarios</legend>
+                        <div class="user-list-container" style="margin-bottom: 15px;">
+                            <table class="user-list-table" style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="border-bottom: 1px solid #ddd; text-align: left;">
+                                        <th style="padding: 8px;">Usuario</th>
+                                        <th style="padding: 8px;">Rol</th>
+                                        <th style="padding: 8px;">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="settings-user-list">
+                                    <!-- Lista de usuarios generada dinámicamente -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="add-user-form" style="border-top: 1px solid #eee; padding-top: 15px;">
+                            <h4 style="margin-bottom: 10px;">Agregar Nuevo Usuario</h4>
+                            <div class="form-group">
+                                <input type="text" id="new-user-username" placeholder="Nombre de usuario" />
+                                <input type="password" id="new-user-password" placeholder="Contraseña" />
+                                <button type="button" id="add-user-btn" class="btn-secondary">Crear Usuario</button>
+                            </div>
+                        </div>
+                    </fieldset>
+                    <fieldset class="form-group">
+                        <legend>Códigos de turnos</legend>
+                        <div id="standard-types-list" class="custom-types-list"></div>
+                    </fieldset>
+                    <fieldset class="form-group">
+                        <legend>Tipos personalizados</legend>
+                        <div id="custom-types-list" class="custom-types-list"></div>
+                        <button type="button" id="add-custom-type" class="btn-secondary">Agregar tipo</button>
+                        <small style="color:#666">Cada tipo necesita un ID, un nombre visible y un código.</small>
+                    </fieldset>
+                    <fieldset class="form-group" id="person-colors-section">
+                        <legend>Colores por persona (calendario)</legend>
+                        <p class="form-hint" style="margin-bottom: 8px; font-size: 13px; color: #666;">Asigne un color a cada persona para identificarla rápido en el calendario. Se muestra como borde izquierdo en la fila.</p>
+                        <div id="person-colors-list" class="person-colors-list"><!-- Se rellena por JS --></div>
+                    </fieldset>
+                    <fieldset class="form-group">
+                        <legend>Seguridad</legend>
+                        <div class="form-group">
+                            <label for="new-admin-password">Nueva contraseña de admin:</label>
+                            <input type="password" id="new-admin-password" name="new-admin-password" placeholder="Dejar en blanco para no cambiar" />
+                        </div>
+                        <div class="form-group">
+                            <label for="new-superadmin-password">Nueva contraseña de superadmin:</label>
+                            <input type="password" id="new-superadmin-password" name="new-superadmin-password" placeholder="Dejar en blanco para no cambiar" />
+                        </div>
+                    </fieldset>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Guardar</button>
+                        <button type="button" id="cancel-settings" class="btn-secondary">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <!-- Overlay de bienvenida -->
+    <div id="welcome-overlay" class="welcome-overlay" style="display:none">
+        <div class="welcome-content">
+            <img src="logo/upa 16_.png" alt="Logo" class="welcome-logo">
+            <h2>Bienvenido</h2>
+            <p>Gestión de guardias y personal</p>
+        </div>
+    </div>
+
+    <!-- Modal de Login -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content login-card">
+            <span class="close" id="close-login-modal">&times;</span>
+            <h2 class="login-title">Iniciar sesión</h2>
+            <form id="login-form" class="login-form">
+                <div class="input-group">
+                    <!-- Icono usuario (SVG inline) -->
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-4.418 0-8 2.239-8 5v2h16v-2c0-2.761-3.582-5-8-5z"/></svg>
+                    <input type="text" id="username" name="username" placeholder="Usuario" autocomplete="username" required>
+                </div>
+                <div class="input-group">
+                    <!-- Icono candado (SVG inline) -->
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 00-5 5v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2h-1V7a5 5 0 00-5-5zm-3 8V7a3 3 0 116 0v3H9z"/></svg>
+                    <input type="password" id="password" name="password" placeholder="Contraseña" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn-primary login-submit">Entrar</button>
+                <!-- Enlaces removidos por política: recuperación y creación de cuentas gestionadas externamente -->
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de ayuda -->
+    <div id="help-modal" class="modal" role="dialog" aria-labelledby="help-modal-title" aria-modal="true">
+        <div class="modal-content help-modal-content">
+            <span class="close" id="close-help-btn" aria-label="Cerrar">&times;</span>
+            <h2 id="help-modal-title" class="help-modal-title">Ayuda</h2>
+            <div class="help-modal-body">
+                <section class="help-section">
+                    <h3>Atajos de teclado</h3>
+                    <ul class="help-list">
+                        <li><kbd>←</kbd> <kbd>→</kbd> Cambiar de mes</li>
+                        <li><kbd>H</kbd> Ir al mes actual (hoy)</li>
+                        <li><kbd>?</kbd> Abrir esta ayuda</li>
+                        <li><kbd>Esc</kbd> Cerrar modal o menú</li>
+                    </ul>
+                </section>
+                <section class="help-section">
+                    <h3>Códigos de turnos</h3>
+                    <div id="help-codes-list" class="help-codes-list"><!-- Se rellena por JS --></div>
+                </section>
+                <section class="help-section">
+                    <h3>Cómo usar</h3>
+                    <ul class="help-list">
+                        <li><strong>Cambiar de mes:</strong> Use las flechas o los botones ← →.</li>
+                        <li><strong>Asignar turno:</strong> Clic en una celda del calendario (debe estar logueado como admin).</li>
+                        <li><strong>Ver estadísticas:</strong> Menú → Ver Estadísticas; seleccione un personal para ver el detalle de fechas por tipo.</li>
+                        <li><strong>Gestionar personal:</strong> Menú → Gestionar Personal.</li>
+                    </ul>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de confirmación genérico -->
+    <div id="confirm-modal" class="modal">
+        <div class="modal-content confirmation-modal">
+            <div class="confirmation-header">
+                <i class="fas fa-question-circle warning-icon"></i>
+                <h3 id="confirm-modal-title">Confirmación</h3>
+            </div>
+            <div class="confirmation-body">
+                <p id="confirm-modal-message">¿Está seguro?</p>
+            </div>
+            <div class="confirmation-footer">
+                <button id="confirm-cancel-btn" class="btn-secondary">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+                <button id="confirm-accept-btn" class="btn-primary">
+                    <i class="fas fa-check"></i> Aceptar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de detalles de movimiento -->
+    <div id="movement-log-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="close-movement-log-modal">&times;</span>
+            <div class="section-header">
+                <h3>Detalle del Movimiento</h3>
+            </div>
+            <div class="movement-log-modal-body">
+                <div class="movement-log-meta">
+                    <p><strong>Fecha:</strong> <span id="movement-log-date">-</span></p>
+                    <p><strong>Hora:</strong> <span id="movement-log-time">-</span></p>
+                    <p><strong>Usuario:</strong> <span id="movement-log-user">-</span></p>
+                    <p><strong>Acción:</strong> <span id="movement-log-action">-</span></p>
+                    <p><strong>Entidad:</strong> <span id="movement-log-entity">-</span></p>
+                </div>
+                <div class="movement-log-details" id="movement-log-details">
+                    <!-- Se renderizarán dinámicamente los detalles del movimiento -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de confirmación para reset -->
+    <div id="reset-confirmation-modal" class="modal">
+        <div class="modal-content confirmation-modal">
+            <div class="confirmation-header">
+                <i class="fas fa-exclamation-triangle warning-icon"></i>
+                <h3>Confirmación de Reset Manual</h3>
+            </div>
+            <div class="confirmation-body">
+                <p><strong>¿Está seguro de que desea realizar un reset manual?</strong></p>
+                <p>Esto archivará las estadísticas del año actual y reiniciará el sistema.</p>
+                <p class="warning-text"><i class="fas fa-warning"></i> ¡Esta acción no se puede deshacer!</p>
+            </div>
+            <div class="confirmation-footer">
+                <button id="cancel-reset-btn" class="btn-secondary">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+                <button id="confirm-reset-btn" class="btn-danger">
+                    <i class="fas fa-refresh"></i> Confirmar Reset
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para agregar/editar personal -->
+    <div id="personal-modal" class="modal">
+        <div class="modal-content modern-modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Agregar Personal</h2>
+                <span class="close">&times;</span>
+            </div>
+            <form id="personal-form" class="modern-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="nombre">Nombre</label>
+                        <input type="text" id="nombre" name="nombre" required placeholder="Ej: Juan">
+                    </div>
+                    <div class="form-group">
+                        <label for="apellido">Apellido</label>
+                        <input type="text" id="apellido" name="apellido" required placeholder="Ej: Pérez">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="modalidad-trabajo">Modalidad</label>
+                        <select id="modalidad-trabajo" name="modalidad-trabajo" required>
+                            <option value="semana">Día de semana</option>
+                            <option value="sadofe">SADOFE</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="turno-preferente">Turno Pref.</label>
+                        <select id="turno-preferente" name="turno-preferente" required>
+                            <option value="dia">Día</option>
+                            <option value="noche">Noche</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="dias-vacaciones">Vacaciones</label>
+                        <input type="number" id="dias-vacaciones" name="dias-vacaciones" min="0" step="1" placeholder="0" />
+                    </div>
+                    <div class="form-group">
+                        <label for="dias-estres">Días Estrés</label>
+                        <input type="number" id="dias-estres" name="dias-estres" min="0" step="1" placeholder="0" />
+                    </div>
+                </div>
+
+                <div class="form-section-divider">Configuración de Horario</div>
+
+                <div class="form-group">
+                    <label>Días Laborables</label>
+                    <div class="workdays chips" id="workdays-chips">
+                        <label class="day-chip" data-day="1"><input type="checkbox" name="work-days" value="1" id="work-day-1"> L</label>
+                        <label class="day-chip" data-day="2"><input type="checkbox" name="work-days" value="2" id="work-day-2"> M</label>
+                        <label class="day-chip" data-day="3"><input type="checkbox" name="work-days" value="3" id="work-day-3"> X</label>
+                        <label class="day-chip" data-day="4"><input type="checkbox" name="work-days" value="4" id="work-day-4"> J</label>
+                        <label class="day-chip" data-day="5"><input type="checkbox" name="work-days" value="5" id="work-day-5"> V</label>
+                        <label class="day-chip" data-day="6"><input type="checkbox" name="work-days" value="6" id="work-day-6"> S</label>
+                        <label class="day-chip" data-day="0"><input type="checkbox" name="work-days" value="0" id="work-day-0"> D</label>
+                    </div>
+                    <div class="selection-btn-group">
+                        <button type="button" class="btn-selection" id="preset-lv">L-V</button>
+                        <button type="button" class="btn-selection" id="preset-sadofe">SADOFE</button>
+                        <button type="button" class="btn-selection" id="preset-todos">Todos</button>
+                        <button type="button" class="btn-selection" id="preset-nada">Ninguno</button>
+                        <label class="apply-holidays-toggle" for="apply-holidays">
+                            <input type="checkbox" id="apply-holidays">
+                            <span>Aplicar en feriados</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Tipo de Horario</label>
+                    <div class="schedule-type-toggle">
+                        <label class="radio-card">
+                            <input type="radio" name="schedule-type" id="schedule-type-fixed" checked>
+                            <span class="radio-card-content">Fijo</span>
+                        </label>
+                        <label class="radio-card">
+                            <input type="radio" name="schedule-type" id="schedule-type-perday">
+                            <span class="radio-card-content">Por día</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="schedule-fixed" class="schedule-block">
+                    <div class="horario-inputs">
+                        <div class="horario-entrada">
+                            <label for="schedule-start">Entrada:</label>
+                            <input type="time" id="schedule-start" name="schedule-start">
+                        </div>
+                        <div class="horario-salida">
+                            <label for="schedule-end">Salida:</label>
+                            <input type="time" id="schedule-end" name="schedule-end">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="schedule-perday" class="schedule-block" style="display:none">
+                    <div class="perday-grid-modern">
+                        <div class="perday-header-row">
+                            <span>Día</span><span>Entrada</span><span>Salida</span>
+                        </div>
+                        <!-- Rows generated via JS or manual? Manual in original -->
+                        <div class="perday-row-modern"><span>Lun</span><input type="time" id="per-start-1"><input type="time" id="per-end-1"></div>
+                        <div class="perday-row-modern"><span>Mar</span><input type="time" id="per-start-2"><input type="time" id="per-end-2"></div>
+                        <div class="perday-row-modern"><span>Mié</span><input type="time" id="per-start-3"><input type="time" id="per-end-3"></div>
+                        <div class="perday-row-modern"><span>Jue</span><input type="time" id="per-start-4"><input type="time" id="per-end-4"></div>
+                        <div class="perday-row-modern"><span>Vie</span><input type="time" id="per-start-5"><input type="time" id="per-end-5"></div>
+                        <div class="perday-row-modern"><span>Sáb</span><input type="time" id="per-start-6"><input type="time" id="per-end-6"></div>
+                        <div class="perday-row-modern"><span>Dom</span><input type="time" id="per-start-0"><input type="time" id="per-end-0"></div>
+                    </div>
+                </div>
+
+                <input type="hidden" id="personal-id">
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn-modern-secondary" id="cancel-btn">Cancelar</button>
+                    <button type="submit" class="btn-modern-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para asignar turno -->
+    <div id="turno-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="turno-modal-title">Asignar Turno</h3>
+            </div>
+            <div class="modal-body">
+                <form id="turno-form">
+                    <input type="hidden" id="turno-id">
+                    <input type="hidden" id="turno-personal-id">
+                    <input type="hidden" id="turno-fecha">
+                    
+                    <div class="form-group">
+                        <label for="turno-tipo">Tipo de Turno:</label>
+                        <select id="turno-tipo" required>
+                            <option value="guardia_fija">Guardia (G)</option>
+                            <!-- opción Guardia Rotativa eliminada a pedido -->
+                            <option value="ausente">Ausente (28)</option>
+                            <option value="carpeta_medica">Carpeta Médica (CM)</option>
+                            <option value="vacaciones">Vacaciones (V)</option>
+                            <option value="compensatorio">Compensatorio (CP)</option>
+                            <option value="estres">Estrés (EST)</option>
+                            <option value="cambios_guardia">Cambios de Guardia (CG)</option>
+                            <option value="articulo26">Artículo 26 (A26)</option>
+                            <option value="dia_sindical">Día Sindical (S)</option>
+                            <option value="dia_estudio">Día de Estudio (D.E)</option>
+                            <option value="vacio" style="color: #dc3545;">Vacío (Limpiar)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group horario-group">
+                        <fieldset>
+                            <legend>Horario:</legend>
+                            <div class="horario-inputs">
+                                <div class="horario-entrada">
+                                    <label for="hora-entrada">Entrada:</label>
+                                    <input type="time" id="hora-entrada" name="hora-entrada">
+                                </div>
+                                <div class="horario-salida">
+                                    <label for="hora-salida">Salida:</label>
+                                    <input type="time" id="hora-salida" name="hora-salida">
+                                </div>
+                            </div>
+                            <div id="horario-calculo" style="margin-top: 10px; font-size: 0.9em; color: #333; font-weight: 600;">
+                                Cantidad Horaria: <span id="cantidad-horaria-display">0 hs</span>
+                            </div>
+                        </fieldset>
+                    </div>
+                    
+                    <!-- Campos condicionales según tipo de solicitud -->
+                    
+                    <!-- Campos para Vacaciones y Semana de Estrés -->
+                    <div id="campos-vacaciones-estres" class="conditional-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="fecha-inicio">Fecha de Inicio:</label>
+                            <input type="date" id="fecha-inicio" name="fecha-inicio">
+                        </div>
+                        <div class="form-group">
+                            <label for="fecha-fin">Fecha de Finalización:</label>
+                            <input type="date" id="fecha-fin" name="fecha-fin">
+                        </div>
+                        <div class="form-group">
+                            <div id="vacaciones-dias-contador" aria-live="polite">Días seleccionados: 0</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Campos para Carpeta Médica -->
+                    <div id="campos-carpeta-medica" class="conditional-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="fecha-inicio-carpeta">Fecha de Inicio:</label>
+                            <input type="date" id="fecha-inicio-carpeta" name="fecha-inicio-carpeta">
+                        </div>
+                        <div class="form-group">
+                            <label for="fecha-alta">Fecha de Alta:</label>
+                            <input type="date" id="fecha-alta" name="fecha-alta">
+                        </div>
+                        <div class="form-group">
+                            <div id="carpeta-dias-contador" aria-live="polite" style="font-weight: 600; color: #333;">Cantidad de días: 0</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Campos para Compensatorio -->
+                    <div id="campos-compensatorio" class="conditional-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="fecha-trabajo-realizado">Fecha del Día Realizado:</label>
+                            <input type="date" id="fecha-trabajo-realizado" name="fecha-trabajo-realizado">
+                        </div>
+                    </div>
+                    
+                    <!-- Campos para Cambios de Guardia -->
+                    <div id="campos-cambios-guardia" class="conditional-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="companero-cambio">Compañero para el Cambio:</label>
+                            <select id="companero-cambio" name="companero-cambio">
+                                <option value="">Seleccione un compañero…</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="fecha-devolucion">Fecha de Devolución:</label>
+                            <input type="date" id="fecha-devolucion" name="fecha-devolucion">
+                        </div>
+                    </div>
+                    
+                    <!-- Campos para Artículo 26 -->
+                    <div id="campos-articulo26" class="conditional-fields" style="display: none;">
+                        <div class="form-group">
+                            <div class="articulo26-info">
+                                <p><strong>Artículo 26:</strong> Máximo 6 días anuales, 1 por mes</p>
+                                <div id="articulo26-contador">
+                                    <span>Días utilizados este año: <strong id="dias-utilizados">0</strong>/6</span>
+                                    <span>Este mes: <strong id="mes-utilizado">No</strong></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    
+
+                    <div class="form-group">
+                        <label for="turno-observaciones">Observaciones:</label>
+                        <div class="observaciones-container">
+                            <button type="button" id="observaciones-btn" class="observaciones-button">
+                                <span id="observaciones-preview">Sin observaciones</span>
+                                <i class="edit-icon">✏️</i>
+                            </button>
+                            <div id="observaciones-edit-mode" class="observaciones-edit-mode" style="display: none;">
+                                <textarea id="turno-observaciones"></textarea>
+                                <div class="observaciones-actions">
+                                    <button type="button" id="save-observaciones" class="btn-save-obs">Guardar</button>
+                                    <button type="button" id="cancel-observaciones" class="btn-cancel-obs">Cancelar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Guardar</button>
+                        <button type="button" id="delete-turno-btn" class="btn-danger">Eliminar</button>
+                        <button type="button" class="btn-secondary cancel-btn">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Librerías para exportar a PDF y Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="ui_components.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
