@@ -71,6 +71,7 @@
                     <button id="next-month" class="btn-secondary" type="button" title="Mes siguiente" aria-label="Mes siguiente"><i class="fas fa-chevron-right"></i></button>
                     <label for="sector-input" class="sector-label">Sector:</label>
                     <input id="sector-input" type="text" placeholder="Ej: Sector" aria-label="Sector para el PDF" />
+                    <button type="button" id="pdf-obs-btn" class="btn-secondary" title="Observaciones PDF" aria-label="Añadir observaciones al PDF"><i class="fas fa-comment-alt"></i></button>
                     <button type="button" id="help-btn" class="btn-secondary" title="Ayuda (?)" aria-label="Abrir ayuda"><i class="fas fa-question-circle"></i> Ayuda</button>
                     <button id="download-pdf-btn" class="btn-info" type="button"><i class="fas fa-file-pdf"></i> Descargar PDF</button>
                 </div>
@@ -264,11 +265,7 @@
                         <button type="button" id="add-custom-type" class="btn-secondary">Agregar tipo</button>
                         <small style="color:#666">Cada tipo necesita un ID, un nombre visible y un código.</small>
                     </fieldset>
-                    <fieldset class="form-group" id="person-colors-section">
-                        <legend>Colores por persona (calendario)</legend>
-                        <p class="form-hint" style="margin-bottom: 8px; font-size: 13px; color: #666;">Asigne un color a cada persona para identificarla rápido en el calendario. Se muestra como borde izquierdo en la fila.</p>
-                        <div id="person-colors-list" class="person-colors-list"><!-- Se rellena por JS --></div>
-                    </fieldset>
+
                     <fieldset class="form-group">
                         <legend>Seguridad</legend>
                         <div class="form-group">
@@ -352,6 +349,26 @@
         </div>
     </div>
 
+    <!-- Modal de Observaciones PDF -->
+    <div id="pdf-obs-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="close-pdf-obs-btn">&times;</span>
+            <h2>Observaciones del Documento</h2>
+            <p>Ingrese observaciones complementarias para el PDF (máx. 500 caracteres).</p>
+            <form id="pdf-obs-form">
+                <div class="form-group">
+                    <textarea id="pdf-obs-text" rows="5" maxlength="500" placeholder="Escriba sus observaciones aquí..."></textarea>
+                    <div id="pdf-obs-counter" style="text-align: right; font-size: 0.8em; color: #666;">0/500</div>
+                    <div id="pdf-obs-error" style="color: #dc3545; font-size: 0.9em; display: none;"></div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Guardar</button>
+                    <button type="button" id="cancel-pdf-obs-btn" class="btn-secondary">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal de confirmación genérico -->
     <div id="confirm-modal" class="modal">
         <div class="modal-content confirmation-modal">
@@ -426,107 +443,118 @@
                 <span class="close">&times;</span>
             </div>
             <form id="personal-form" class="modern-form">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="nombre">Nombre</label>
-                        <input type="text" id="nombre" name="nombre" required placeholder="Ej: Juan">
-                    </div>
-                    <div class="form-group">
-                        <label for="apellido">Apellido</label>
-                        <input type="text" id="apellido" name="apellido" required placeholder="Ej: Pérez">
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="modalidad-trabajo">Modalidad</label>
-                        <select id="modalidad-trabajo" name="modalidad-trabajo" required>
-                            <option value="semana">Día de semana</option>
-                            <option value="sadofe">SADOFE</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="turno-preferente">Turno Pref.</label>
-                        <select id="turno-preferente" name="turno-preferente" required>
-                            <option value="dia">Día</option>
-                            <option value="noche">Noche</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="dias-vacaciones">Vacaciones</label>
-                        <input type="number" id="dias-vacaciones" name="dias-vacaciones" min="0" step="1" placeholder="0" />
-                    </div>
-                    <div class="form-group">
-                        <label for="dias-estres">Días Estrés</label>
-                        <input type="number" id="dias-estres" name="dias-estres" min="0" step="1" placeholder="0" />
-                    </div>
-                </div>
-
-                <div class="form-section-divider">Configuración de Horario</div>
-
-                <div class="form-group">
-                    <label>Días Laborables</label>
-                    <div class="workdays chips" id="workdays-chips">
-                        <label class="day-chip" data-day="1"><input type="checkbox" name="work-days" value="1" id="work-day-1"> L</label>
-                        <label class="day-chip" data-day="2"><input type="checkbox" name="work-days" value="2" id="work-day-2"> M</label>
-                        <label class="day-chip" data-day="3"><input type="checkbox" name="work-days" value="3" id="work-day-3"> X</label>
-                        <label class="day-chip" data-day="4"><input type="checkbox" name="work-days" value="4" id="work-day-4"> J</label>
-                        <label class="day-chip" data-day="5"><input type="checkbox" name="work-days" value="5" id="work-day-5"> V</label>
-                        <label class="day-chip" data-day="6"><input type="checkbox" name="work-days" value="6" id="work-day-6"> S</label>
-                        <label class="day-chip" data-day="0"><input type="checkbox" name="work-days" value="0" id="work-day-0"> D</label>
-                    </div>
-                    <div class="selection-btn-group">
-                        <button type="button" class="btn-selection" id="preset-lv">L-V</button>
-                        <button type="button" class="btn-selection" id="preset-sadofe">SADOFE</button>
-                        <button type="button" class="btn-selection" id="preset-todos">Todos</button>
-                        <button type="button" class="btn-selection" id="preset-nada">Ninguno</button>
-                        <label class="apply-holidays-toggle" for="apply-holidays">
-                            <input type="checkbox" id="apply-holidays">
-                            <span>Aplicar en feriados</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Tipo de Horario</label>
-                    <div class="schedule-type-toggle">
-                        <label class="radio-card">
-                            <input type="radio" name="schedule-type" id="schedule-type-fixed" checked>
-                            <span class="radio-card-content">Fijo</span>
-                        </label>
-                        <label class="radio-card">
-                            <input type="radio" name="schedule-type" id="schedule-type-perday">
-                            <span class="radio-card-content">Por día</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div id="schedule-fixed" class="schedule-block">
-                    <div class="horario-inputs">
-                        <div class="horario-entrada">
-                            <label for="schedule-start">Entrada:</label>
-                            <input type="time" id="schedule-start" name="schedule-start">
+                <div class="personal-grid-layout">
+                    <!-- LEFT COLUMN: Personal Details -->
+                    <div class="personal-col-left">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="nombre">Nombre</label>
+                                <input type="text" id="nombre" name="nombre" required placeholder="Ej: Juan">
+                            </div>
+                            <div class="form-group">
+                                <label for="apellido">Apellido</label>
+                                <input type="text" id="apellido" name="apellido" required placeholder="Ej: Pérez">
+                            </div>
                         </div>
-                        <div class="horario-salida">
-                            <label for="schedule-end">Salida:</label>
-                            <input type="time" id="schedule-end" name="schedule-end">
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="modalidad-trabajo">Modalidad</label>
+                                <select id="modalidad-trabajo" name="modalidad-trabajo" required>
+                                    <option value="semana">Día de semana</option>
+                                    <option value="sadofe">SADOFE</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="turno-preferente">Turno Pref.</label>
+                                <select id="turno-preferente" name="turno-preferente" required>
+                                    <option value="dia">Día</option>
+                                    <option value="noche">Noche</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="dias-vacaciones">Vacaciones</label>
+                                <input type="number" id="dias-vacaciones" name="dias-vacaciones" min="0" step="1" placeholder="0" />
+                            </div>
+                            <div class="form-group">
+                                <label for="dias-estres">Días Estrés</label>
+                                <input type="number" id="dias-estres" name="dias-estres" min="0" step="1" placeholder="0" />
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div id="schedule-perday" class="schedule-block" style="display:none">
-                    <div class="perday-grid-modern">
-                        <div class="perday-header-row">
-                            <span>Día</span><span>Entrada</span><span>Salida</span>
+                    <!-- RIGHT COLUMN: Schedule Configuration -->
+                    <div class="personal-col-right">
+                        <div class="form-section-divider">Configuración de Horario</div>
+
+                        <div class="form-group">
+                            <label>Días Laborables</label>
+                            <div class="workdays chips" id="workdays-chips">
+                                <label class="day-chip" data-day="1"><input type="checkbox" name="work-days" value="1" id="work-day-1"> L</label>
+                                <label class="day-chip" data-day="2"><input type="checkbox" name="work-days" value="2" id="work-day-2"> M</label>
+                                <label class="day-chip" data-day="3"><input type="checkbox" name="work-days" value="3" id="work-day-3"> X</label>
+                                <label class="day-chip" data-day="4"><input type="checkbox" name="work-days" value="4" id="work-day-4"> J</label>
+                                <label class="day-chip" data-day="5"><input type="checkbox" name="work-days" value="5" id="work-day-5"> V</label>
+                                <label class="day-chip" data-day="6"><input type="checkbox" name="work-days" value="6" id="work-day-6"> S</label>
+                                <label class="day-chip" data-day="0"><input type="checkbox" name="work-days" value="0" id="work-day-0"> D</label>
+                            </div>
+                            <div class="selection-btn-group">
+                                <button type="button" class="btn-selection" id="preset-lv">L-V</button>
+                                <button type="button" class="btn-selection" id="preset-sadofe">SADOFE</button>
+                                <button type="button" class="btn-selection" id="preset-todos">Todos</button>
+                                <button type="button" class="btn-selection" id="preset-nada">Ninguno</button>
+                                <label class="apply-holidays-toggle" for="apply-holidays">
+                                    <input type="checkbox" id="apply-holidays">
+                                    <span>Aplicar en feriados</span>
+                                </label>
+                            </div>
                         </div>
-                        <!-- Rows generated via JS or manual? Manual in original -->
-                        <div class="perday-row-modern"><span>Lun</span><input type="time" id="per-start-1"><input type="time" id="per-end-1"></div>
-                        <div class="perday-row-modern"><span>Mar</span><input type="time" id="per-start-2"><input type="time" id="per-end-2"></div>
-                        <div class="perday-row-modern"><span>Mié</span><input type="time" id="per-start-3"><input type="time" id="per-end-3"></div>
-                        <div class="perday-row-modern"><span>Jue</span><input type="time" id="per-start-4"><input type="time" id="per-end-4"></div>
-                        <div class="perday-row-modern"><span>Vie</span><input type="time" id="per-start-5"><input type="time" id="per-end-5"></div>
-                        <div class="perday-row-modern"><span>Sáb</span><input type="time" id="per-start-6"><input type="time" id="per-end-6"></div>
-                        <div class="perday-row-modern"><span>Dom</span><input type="time" id="per-start-0"><input type="time" id="per-end-0"></div>
+
+                        <div class="form-group">
+                            <label>Tipo de Horario</label>
+                            <div class="schedule-type-toggle">
+                                <label class="radio-card">
+                                    <input type="radio" name="schedule-type" id="schedule-type-fixed" checked>
+                                    <span class="radio-card-content">Fijo</span>
+                                </label>
+                                <label class="radio-card">
+                                    <input type="radio" name="schedule-type" id="schedule-type-perday">
+                                    <span class="radio-card-content">Por día</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="schedule-fixed" class="schedule-block">
+                            <div class="horario-inputs">
+                                <div class="horario-entrada">
+                                    <label for="schedule-start">Entrada:</label>
+                                    <input type="time" id="schedule-start" name="schedule-start">
+                                </div>
+                                <div class="horario-salida">
+                                    <label for="schedule-end">Salida:</label>
+                                    <input type="time" id="schedule-end" name="schedule-end">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="schedule-perday" class="schedule-block" style="display:none">
+                            <div class="perday-grid-modern">
+                                <div class="perday-header-row">
+                                    <span>Día</span><span>Entrada</span><span>Salida</span>
+                                </div>
+                                <!-- Rows generated via JS or manual? Manual in original -->
+                                <div class="perday-row-modern"><span>Lun</span><input type="time" id="per-start-1"><input type="time" id="per-end-1"></div>
+                                <div class="perday-row-modern"><span>Mar</span><input type="time" id="per-start-2"><input type="time" id="per-end-2"></div>
+                                <div class="perday-row-modern"><span>Mié</span><input type="time" id="per-start-3"><input type="time" id="per-end-3"></div>
+                                <div class="perday-row-modern"><span>Jue</span><input type="time" id="per-start-4"><input type="time" id="per-end-4"></div>
+                                <div class="perday-row-modern"><span>Vie</span><input type="time" id="per-start-5"><input type="time" id="per-end-5"></div>
+                                <div class="perday-row-modern"><span>Sáb</span><input type="time" id="per-start-6"><input type="time" id="per-end-6"></div>
+                                <div class="perday-row-modern"><span>Dom</span><input type="time" id="per-start-0"><input type="time" id="per-end-0"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -552,124 +580,156 @@
                     <input type="hidden" id="turno-personal-id">
                     <input type="hidden" id="turno-fecha">
                     
-                    <div class="form-group">
-                        <label for="turno-tipo">Tipo de Turno:</label>
-                        <select id="turno-tipo" required>
-                            <option value="guardia_fija">Guardia (G)</option>
-                            <!-- opción Guardia Rotativa eliminada a pedido -->
-                            <option value="ausente">Ausente (28)</option>
-                            <option value="carpeta_medica">Carpeta Médica (CM)</option>
-                            <option value="vacaciones">Vacaciones (V)</option>
-                            <option value="compensatorio">Compensatorio (CP)</option>
-                            <option value="estres">Estrés (EST)</option>
-                            <option value="cambios_guardia">Cambios de Guardia (CG)</option>
-                            <option value="articulo26">Artículo 26 (A26)</option>
-                            <option value="dia_sindical">Día Sindical (S)</option>
-                            <option value="dia_estudio">Día de Estudio (D.E)</option>
-                            <option value="vacio" style="color: #dc3545;">Vacío (Limpiar)</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group horario-group">
-                        <fieldset>
-                            <legend>Horario:</legend>
-                            <div class="horario-inputs">
-                                <div class="horario-entrada">
-                                    <label for="hora-entrada">Entrada:</label>
-                                    <input type="time" id="hora-entrada" name="hora-entrada">
-                                </div>
-                                <div class="horario-salida">
-                                    <label for="hora-salida">Salida:</label>
-                                    <input type="time" id="hora-salida" name="hora-salida">
-                                </div>
+                    <div class="turno-grid-layout">
+                        <div class="turno-col-left">
+                            <div class="form-group">
+                                <label for="turno-tipo">Tipo de Turno:</label>
+                                <select id="turno-tipo" required>
+                                    <option value="guardia_fija">Guardia (G)</option>
+                                    <!-- opción Guardia Rotativa eliminada a pedido -->
+                                    <option value="ausente">Ausente (28)</option>
+                                    <option value="carpeta_medica">Carpeta Médica (CM)</option>
+                                    <option value="vacaciones">Vacaciones (V)</option>
+                                    <option value="compensatorio">Compensatorio (CP)</option>
+                                    <option value="estres">Estrés (EST)</option>
+                                    <option value="cambios_guardia">Cambios de Guardia (CG)</option>
+                                    <option value="articulo26">Artículo 26 (A26)</option>
+                                    <option value="dia_sindical">Día Sindical (S)</option>
+                                    <option value="dia_estudio">Día de Estudio (D.E)</option>
+                                    <option value="vacio" style="color: #dc3545;">Vacío (Limpiar)</option>
+                                </select>
                             </div>
-                            <div id="horario-calculo" style="margin-top: 10px; font-size: 0.9em; color: #333; font-weight: 600;">
-                                Cantidad Horaria: <span id="cantidad-horaria-display">0 hs</span>
-                            </div>
-                        </fieldset>
-                    </div>
-                    
-                    <!-- Campos condicionales según tipo de solicitud -->
-                    
-                    <!-- Campos para Vacaciones y Semana de Estrés -->
-                    <div id="campos-vacaciones-estres" class="conditional-fields" style="display: none;">
-                        <div class="form-group">
-                            <label for="fecha-inicio">Fecha de Inicio:</label>
-                            <input type="date" id="fecha-inicio" name="fecha-inicio">
-                        </div>
-                        <div class="form-group">
-                            <label for="fecha-fin">Fecha de Finalización:</label>
-                            <input type="date" id="fecha-fin" name="fecha-fin">
-                        </div>
-                        <div class="form-group">
-                            <div id="vacaciones-dias-contador" aria-live="polite">Días seleccionados: 0</div>
-                        </div>
-                    </div>
-                    
-                    <!-- Campos para Carpeta Médica -->
-                    <div id="campos-carpeta-medica" class="conditional-fields" style="display: none;">
-                        <div class="form-group">
-                            <label for="fecha-inicio-carpeta">Fecha de Inicio:</label>
-                            <input type="date" id="fecha-inicio-carpeta" name="fecha-inicio-carpeta">
-                        </div>
-                        <div class="form-group">
-                            <label for="fecha-alta">Fecha de Alta:</label>
-                            <input type="date" id="fecha-alta" name="fecha-alta">
-                        </div>
-                        <div class="form-group">
-                            <div id="carpeta-dias-contador" aria-live="polite" style="font-weight: 600; color: #333;">Cantidad de días: 0</div>
-                        </div>
-                    </div>
-                    
-                    <!-- Campos para Compensatorio -->
-                    <div id="campos-compensatorio" class="conditional-fields" style="display: none;">
-                        <div class="form-group">
-                            <label for="fecha-trabajo-realizado">Fecha del Día Realizado:</label>
-                            <input type="date" id="fecha-trabajo-realizado" name="fecha-trabajo-realizado">
-                        </div>
-                    </div>
-                    
-                    <!-- Campos para Cambios de Guardia -->
-                    <div id="campos-cambios-guardia" class="conditional-fields" style="display: none;">
-                        <div class="form-group">
-                            <label for="companero-cambio">Compañero para el Cambio:</label>
-                            <select id="companero-cambio" name="companero-cambio">
-                                <option value="">Seleccione un compañero…</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="fecha-devolucion">Fecha de Devolución:</label>
-                            <input type="date" id="fecha-devolucion" name="fecha-devolucion">
-                        </div>
-                    </div>
-                    
-                    <!-- Campos para Artículo 26 -->
-                    <div id="campos-articulo26" class="conditional-fields" style="display: none;">
-                        <div class="form-group">
-                            <div class="articulo26-info">
-                                <p><strong>Artículo 26:</strong> Máximo 6 días anuales, 1 por mes</p>
-                                <div id="articulo26-contador">
-                                    <span>Días utilizados este año: <strong id="dias-utilizados">0</strong>/6</span>
-                                    <span>Este mes: <strong id="mes-utilizado">No</strong></span>
+                            
+                            <div class="form-group asistencia-group" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                                
+                                <div style="margin-bottom: 15px;">
+                                    <div style="font-size: 0.9em; font-weight: 600; color: #333; margin-bottom: 8px;">Horario del Turno</div>
+                                    <div class="horario-inputs" style="display: flex; gap: 15px;">
+                                        <div class="horario-entrada" style="flex: 1;">
+                                            <label for="hora-entrada" style="display: block; margin-bottom: 4px; font-size: 0.85em; color: #666;">Entrada:</label>
+                                            <input type="time" id="hora-entrada" name="hora-entrada" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; background-color: #f8f9fa;">
+                                        </div>
+                                        <div class="horario-salida" style="flex: 1;">
+                                            <label for="hora-salida" style="display: block; margin-bottom: 4px; font-size: 0.85em; color: #666;">Salida:</label>
+                                            <input type="time" id="hora-salida" name="hora-salida" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; background-color: #f8f9fa;">
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
 
-                    
+                                <details style="margin-bottom: 15px; border: 1px solid #eee; border-radius: 4px; padding: 8px;">
+                                    <summary style="font-size: 0.85em; color: #666; cursor: pointer; user-select: none;">Ver/Editar Horario Programado (Referencia)</summary>
+                                    <div style="margin-top: 10px;">
+                                        <div class="horario-inputs" style="display: flex; gap: 15px;">
+                                            <div class="horario-entrada" style="flex: 1;">
+                                                <label for="hora-programada-entrada" style="display: block; margin-bottom: 4px; font-size: 0.85em; color: #666;">Entrada Programada:</label>
+                                                <input type="time" id="hora-programada-entrada" name="hora-programada-entrada" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; background-color: #f8f9fa;">
+                                            </div>
+                                            <div class="horario-salida" style="flex: 1;">
+                                                <label for="hora-programada-salida" style="display: block; margin-bottom: 4px; font-size: 0.85em; color: #666;">Salida Programada:</label>
+                                                <input type="time" id="hora-programada-salida" name="hora-programada-salida" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; background-color: #f8f9fa;">
+                                            </div>
+                                        </div>
+                                        <div style="margin-top: 5px; font-size: 0.8em; color: #888;">
+                                            * Este horario se usa para calcular llegadas tarde.
+                                        </div>
+                                    </div>
+                                </details>
 
-                    <div class="form-group">
-                        <label for="turno-observaciones">Observaciones:</label>
-                        <div class="observaciones-container">
-                            <button type="button" id="observaciones-btn" class="observaciones-button">
-                                <span id="observaciones-preview">Sin observaciones</span>
-                                <i class="edit-icon">✏️</i>
-                            </button>
-                            <div id="observaciones-edit-mode" class="observaciones-edit-mode" style="display: none;">
-                                <textarea id="turno-observaciones"></textarea>
-                                <div class="observaciones-actions">
-                                    <button type="button" id="save-observaciones" class="btn-save-obs">Guardar</button>
-                                    <button type="button" id="cancel-observaciones" class="btn-cancel-obs">Cancelar</button>
+                                <div id="horario-calculo" style="margin-top: 10px; font-size: 0.9em; color: #333; font-weight: 600;">
+                                    Cantidad Horaria: <span id="cantidad-horaria-display">0 hs</span>
+                                </div>
+                                <div id="asistencia-calculo" style="margin-top: 5px; font-size: 0.9em; color: #d9534f; font-weight: 600; min-height: 1.2em;"></div>
+                            </div>
+
+                            <!-- Campos condicionales según tipo de solicitud -->
+                            
+                            <!-- Campos para Vacaciones y Semana de Estrés -->
+                            <div id="campos-vacaciones-estres" class="conditional-fields" style="display: none;">
+                                <div class="turno-row">
+                                    <div class="form-group">
+                                        <label for="fecha-inicio">Fecha de Inicio:</label>
+                                        <input type="date" id="fecha-inicio" name="fecha-inicio">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="fecha-fin">Fecha de Finalización:</label>
+                                        <input type="date" id="fecha-fin" name="fecha-fin">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <div id="vacaciones-dias-contador" aria-live="polite">Días seleccionados: 0</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Campos para Carpeta Médica -->
+                            <div id="campos-carpeta-medica" class="conditional-fields" style="display: none;">
+                                <div class="turno-row">
+                                    <div class="form-group">
+                                        <label for="fecha-inicio-carpeta">Fecha de Inicio:</label>
+                                        <input type="date" id="fecha-inicio-carpeta" name="fecha-inicio-carpeta">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="fecha-alta">Fecha de Alta:</label>
+                                        <input type="date" id="fecha-alta" name="fecha-alta">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <div id="carpeta-dias-contador" aria-live="polite" style="font-weight: 600; color: #333;">Cantidad de días: 0</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Campos para Compensatorio -->
+                            <div id="campos-compensatorio" class="conditional-fields" style="display: none;">
+                                <div class="form-group">
+                                    <label for="fecha-trabajo-realizado">Fecha del Día Realizado:</label>
+                                    <input type="date" id="fecha-trabajo-realizado" name="fecha-trabajo-realizado">
+                                </div>
+                            </div>
+                            
+                            <!-- Campos para Cambios de Guardia -->
+                            <div id="campos-cambios-guardia" class="conditional-fields" style="display: none;">
+                                <div class="turno-row">
+                                    <div class="form-group">
+                                        <label for="companero-cambio">Compañero para el Cambio:</label>
+                                        <select id="companero-cambio" name="companero-cambio">
+                                            <option value="">Seleccione un compañero…</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="fecha-devolucion">Fecha de Devolución:</label>
+                                        <input type="date" id="fecha-devolucion" name="fecha-devolucion">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Campos para Artículo 26 -->
+                            <div id="campos-articulo26" class="conditional-fields" style="display: none;">
+                                <div class="form-group">
+                                    <div class="articulo26-info">
+                                        <p><strong>Artículo 26:</strong> Máximo 6 días anuales, 1 por mes</p>
+                                        <div id="articulo26-contador">
+                                            <span>Días utilizados este año: <strong id="dias-utilizados">0</strong>/6</span>
+                                            <span>Este mes: <strong id="mes-utilizado">No</strong></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="turno-col-right">
+                            <div class="form-group" style="height: 100%; display: flex; flex-direction: column;">
+                                <label for="turno-observaciones">Observaciones:</label>
+                                <div class="observaciones-container" style="flex: 1; display: flex; flex-direction: column;">
+                                    <button type="button" id="observaciones-btn" class="observaciones-button" style="flex: 1; min-height: 150px; align-items: flex-start; padding: 10px;">
+                                        <span id="observaciones-preview">Sin observaciones</span>
+                                        <i class="edit-icon">✏️</i>
+                                    </button>
+                                    <div id="observaciones-edit-mode" class="observaciones-edit-mode" style="display: none; flex: 1; flex-direction: column;">
+                                        <textarea id="turno-observaciones" style="flex: 1; min-height: 150px; resize: none;"></textarea>
+                                        <div class="observaciones-actions">
+                                            <button type="button" id="save-observaciones" class="btn-save-obs">Guardar</button>
+                                            <button type="button" id="cancel-observaciones" class="btn-cancel-obs">Cancelar</button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

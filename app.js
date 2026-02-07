@@ -5,6 +5,7 @@ let users = []; // Usuarios adicionales creados por Super Admin
 let currentUser = null; // sesión actual: { username, role }
 let adminIdleTimer = null; // temporizador de inactividad para admin
 let adminActivityHandler = null; // handler para reiniciar temporizador
+let pdfObservations = {}; // Observaciones complementarias para el PDF (por mes)
 
 // Silenciar logs en consola por defecto (se pueden reactivar con localStorage 'vigilancia-debug-logs')
 (function() {
@@ -41,7 +42,7 @@ let adminActivityHandler = null; // handler para reiniciar temporizador
 // Función para manejar el cambio de tipo de turno y mostrar campos condicionales
 function handleTipoTurnoChange() {
     const tipoTurno = document.getElementById('turno-tipo').value;
-    const horarioGroup = document.querySelector('.horario-group');
+    const horarioGroup = document.querySelector('.asistencia-group');
     
     hideAllConditionalFields();
     
@@ -451,6 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(() => autoMarkScheduledShifts(false), 5000);
     updateSessionUI();
     setupEventListeners();
+    setupPdfObservationsListeners();
     // Mostrar mensajes de cierre previo si aplica
     try {
         const reason = sessionStorage.getItem('logout-reason');
@@ -1008,6 +1010,12 @@ function renderStats() {
             th.textContent = getTypeLabel(t);
             head.appendChild(th);
         });
+        const thLate = document.createElement('th');
+        thLate.textContent = 'Llegadas Tardías';
+        head.appendChild(thLate);
+        const thEarly = document.createElement('th');
+        thEarly.textContent = 'Salidas Anticipadas';
+        head.appendChild(thEarly);
     })();
     
     console.log("Personal array:", personal);
@@ -1055,6 +1063,12 @@ function renderStats() {
             th.textContent = getTypeLabel(t);
             head.appendChild(th);
         });
+        const thLate = document.createElement('th');
+        thLate.textContent = 'Llegadas Tardías';
+        head.appendChild(thLate);
+        const thEarly = document.createElement('th');
+        thEarly.textContent = 'Salidas Anticipadas';
+        head.appendChild(thEarly);
     })();
 
     // Iterar personal filtrado
@@ -1066,21 +1080,57 @@ function renderStats() {
         const row = document.createElement('tr');
         const counts = {};
         typesOrder.forEach(t => { counts[t] = 0; });
+        let llegadasTardias = 0;
+        let salidasAnticipadas = 0;
 
         for (const fecha in turnos) {
             // Fix: Parsear año manualmente para evitar timezone shift
             const y = parseInt(fecha.split('-')[0], 10);
             if (y !== currentYear) continue;
             const turnoPersona = turnos[fecha][persona.id];
-            if (turnoPersona && turnoPersona.tipo) {
-                if (counts[turnoPersona.tipo] == null) counts[turnoPersona.tipo] = 0;
-                counts[turnoPersona.tipo]++;
+            if (turnoPersona) {
+                if (turnoPersona.tipo) {
+                    if (counts[turnoPersona.tipo] == null) counts[turnoPersona.tipo] = 0;
+                    counts[turnoPersona.tipo]++;
+                }
+                
+                // Obtener horarios programados (guardados o calculados al vuelo)
+                let progEntrada = turnoPersona.horaProgramadaEntrada;
+                let progSalida = turnoPersona.horaProgramadaSalida;
+                
+                if (!progEntrada || !progSalida) {
+                    const expected = getExpectedSchedule(persona.id, fecha);
+                    if (expected) {
+                        if (!progEntrada) progEntrada = expected.start;
+                        if (!progSalida) progSalida = expected.end;
+                    }
+                }
+
+                // Calcular llegadas tardías
+                if (turnoPersona.horaEntrada && progEntrada) {
+                    const actual = timeStrToMinutes(turnoPersona.horaEntrada);
+                    const programmed = timeStrToMinutes(progEntrada);
+                    if (actual !== null && programmed !== null && actual > programmed) {
+                        llegadasTardias++;
+                    }
+                }
+                
+                // Calcular salidas anticipadas
+                if (turnoPersona.horaSalida && progSalida) {
+                    const actual = timeStrToMinutes(turnoPersona.horaSalida);
+                    const programmed = timeStrToMinutes(progSalida);
+                    if (actual !== null && programmed !== null && programmed > actual) {
+                        salidasAnticipadas++;
+                    }
+                }
             }
         }
 
         const cells = [`<td>${persona.nombre} ${persona.apellido}</td>`].concat(
             typesOrder.map(t => `<td>${counts[t] || 0}</td>`)
         );
+        cells.push(`<td style="color: ${llegadasTardias > 0 ? '#dc3545' : 'inherit'}; font-weight: ${llegadasTardias > 0 ? 'bold' : 'normal'}">${llegadasTardias}</td>`);
+        cells.push(`<td style="color: ${salidasAnticipadas > 0 ? '#dc3545' : 'inherit'}; font-weight: ${salidasAnticipadas > 0 ? 'bold' : 'normal'}">${salidasAnticipadas}</td>`);
         row.innerHTML = cells.join('');
         statsList.appendChild(row);
     });
@@ -1121,22 +1171,60 @@ function renderStatsDates() {
     const s = getSettings();
     const customTypes = (s && Array.isArray(s.customTypes)) ? s.customTypes.map(ct => ct.id) : [];
     const baseTypes = ['ausente','compensatorio','estres','articulo26','vacaciones','carpeta_medica','cambios_guardia','dia_sindical','dia_estudio'];
-    const allTypes = baseTypes.concat(customTypes);
+    const anomalyTypes = ['llegadas_tardias', 'salidas_anticipadas'];
+    const allTypes = baseTypes.concat(customTypes).concat(anomalyTypes);
     const tipoLabels = {};
     allTypes.forEach(t => { tipoLabels[t] = getTypeLabel(t); });
+    // Etiquetas manuales para anomalías
+    tipoLabels['llegadas_tardias'] = 'Llegadas Tardías';
+    tipoLabels['salidas_anticipadas'] = 'Salidas Anticipadas';
+    
     const fechasPorTipo = {};
     allTypes.forEach(t => { fechasPorTipo[t] = []; });
 
-    // Recopilar fechas del año actual (excluyendo guardias)
+    // Recopilar fechas del año actual (incluyendo anomalías)
     Object.keys(turnos).forEach(fecha => {
         // Fix: Parsear año manualmente
         const y = parseInt(fecha.split('-')[0], 10);
         if (y !== currentYear) return;
         const turno = turnos[fecha][selectedId];
         if (!turno) return;
-        if (turno.tipo === 'guardia_fija') return;
-        if (!fechasPorTipo[turno.tipo]) fechasPorTipo[turno.tipo] = [];
-        fechasPorTipo[turno.tipo].push(fecha);
+        
+        // 1. Clasificación normal por tipo
+        if (turno.tipo !== 'guardia_fija' && fechasPorTipo[turno.tipo]) {
+             fechasPorTipo[turno.tipo].push(fecha);
+        }
+
+        // 2. Detección de Llegadas Tardías y Salidas Anticipadas (en cualquier turno)
+        // Obtener horarios programados (guardados o calculados al vuelo)
+        let progEntrada = turno.horaProgramadaEntrada;
+        let progSalida = turno.horaProgramadaSalida;
+        
+        if (!progEntrada || !progSalida) {
+            const expected = getExpectedSchedule(selectedId, fecha);
+            if (expected) {
+                if (!progEntrada) progEntrada = expected.start;
+                if (!progSalida) progSalida = expected.end;
+            }
+        }
+
+        // Calcular llegadas tardías
+        if (turno.horaEntrada && progEntrada) {
+            const actual = timeStrToMinutes(turno.horaEntrada);
+            const programmed = timeStrToMinutes(progEntrada);
+            if (actual !== null && programmed !== null && actual > programmed) {
+                fechasPorTipo['llegadas_tardias'].push(fecha);
+            }
+        }
+        
+        // Calcular salidas anticipadas
+        if (turno.horaSalida && progSalida) {
+            const actual = timeStrToMinutes(turno.horaSalida);
+            const programmed = timeStrToMinutes(progSalida);
+            if (actual !== null && programmed !== null && programmed > actual) {
+                fechasPorTipo['salidas_anticipadas'].push(fecha);
+            }
+        }
     });
 
     // Construir UI: sección por tipo con fechas ordenadas cronológicamente
@@ -1260,7 +1348,39 @@ function renderStatsDates() {
                 pill.dataset.search = `${formatDateShort(f)} ${nombreMes}`.toLowerCase();
                 pill.dataset.monthBlock = mesBlock.getAttribute('data-month-key') || key;
                 const turno = turnos[f] && turnos[f][selectedId];
-                const tooltipText = buildTurnoTooltipText(turno, tipo);
+                let tooltipText = '';
+                
+                if (tipo === 'llegadas_tardias' || tipo === 'salidas_anticipadas') {
+                    let progEntrada = turno.horaProgramadaEntrada;
+                    let progSalida = turno.horaProgramadaSalida;
+                    
+                    if (!progEntrada || !progSalida) {
+                         const expected = getExpectedSchedule(selectedId, f);
+                         if (expected) {
+                             if (!progEntrada) progEntrada = expected.start;
+                             if (!progSalida) progSalida = expected.end;
+                         }
+                    }
+
+                    if (tipo === 'llegadas_tardias' && turno.horaEntrada && progEntrada) {
+                        const actual = timeStrToMinutes(turno.horaEntrada);
+                        const programmed = timeStrToMinutes(progEntrada);
+                        if (actual !== null && programmed !== null) {
+                            const diff = actual - programmed;
+                            tooltipText = `Llegada Tardía: ${diff} min (Entrada: ${turno.horaEntrada} vs ${progEntrada})`;
+                        }
+                    } else if (tipo === 'salidas_anticipadas' && turno.horaSalida && progSalida) {
+                        const actual = timeStrToMinutes(turno.horaSalida);
+                        const programmed = timeStrToMinutes(progSalida);
+                        if (actual !== null && programmed !== null) {
+                            const diff = programmed - actual;
+                            tooltipText = `Salida Anticipada: ${diff} min (Salida: ${turno.horaSalida} vs ${progSalida})`;
+                        }
+                    }
+                } else {
+                    tooltipText = buildTurnoTooltipText(turno, tipo);
+                }
+
                 if (tooltipText) {
                     pill.title = tooltipText;
                     pill.setAttribute('aria-label', tooltipText);
@@ -2529,6 +2649,48 @@ async function exportCalendarToPDF() {
                             const tipoTurno = t.tipo || '';
                             let include = false;
                             let finalText = obsText;
+
+                            // Detectar llegadas tardías y salidas anticipadas
+                            let scheduledStart = t.horaProgramadaEntrada;
+                            let scheduledEnd = t.horaProgramadaSalida;
+
+                            // Si no están guardados en el turno, intentar calcularlos desde el perfil
+                            if (!scheduledStart || !scheduledEnd) {
+                                const expected = getExpectedSchedule(pid, fecha);
+                                if (expected) {
+                                    if (!scheduledStart) scheduledStart = expected.start;
+                                    if (!scheduledEnd) scheduledEnd = expected.end;
+                                }
+                            }
+
+                            if (t.horaEntrada && scheduledStart) {
+                                const actual = timeStrToMinutes(t.horaEntrada);
+                                const scheduled = timeStrToMinutes(scheduledStart);
+                                
+                                if (actual !== null && scheduled !== null) {
+                                    const diff = actual - scheduled;
+                                    if (diff > 0) {
+                                        const lateText = `⚠️ LLEGADA TARDÍA: ${diff} min (Entrada: ${t.horaEntrada} vs ${scheduledStart})`;
+                                        finalText = finalText ? `${finalText}\n${lateText}` : lateText;
+                                        include = true;
+                                    }
+                                }
+                            }
+                            
+                            if (t.horaSalida && scheduledEnd) {
+                                const actual = timeStrToMinutes(t.horaSalida);
+                                const scheduled = timeStrToMinutes(scheduledEnd);
+                                
+                                if (actual !== null && scheduled !== null) {
+                                    const diff = scheduled - actual; // scheduled > actual means left early
+                                    if (diff > 0) {
+                                        const earlyText = `⚠️ SALIDA ANTICIPADA: ${diff} min (Salida: ${t.horaSalida} vs ${scheduledEnd})`;
+                                        finalText = finalText ? `${finalText}\n${earlyText}` : earlyText;
+                                        include = true;
+                                    }
+                                }
+                            }
+
                             let fechaParaOrden = fecha; // por defecto usar la fecha del día
                             if (tipoTurno === 'cambios_guardia') {
                                 // Incluir siempre Cambios de Guardia y mostrar texto informativo de CG
@@ -2714,6 +2876,74 @@ async function exportCalendarToPDF() {
             try { obsContainer.remove(); } catch { /* ignorar */ }
         }
 
+        // Renderizar Observaciones Complementarias (si existen)
+        const obsKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+        let obsText = '';
+        if (typeof pdfObservations === 'object' && pdfObservations !== null) {
+            obsText = pdfObservations[obsKey] || '';
+        }
+
+        if (obsText && obsText.trim()) {
+            const compObsContainer = document.createElement('div');
+            compObsContainer.id = 'export-comp-observaciones';
+            compObsContainer.style.position = 'absolute';
+            compObsContainer.style.left = '-9999px';
+            compObsContainer.style.top = '0';
+            compObsContainer.style.width = tableEl.offsetWidth ? `${tableEl.offsetWidth}px` : '1000px';
+            compObsContainer.style.padding = '16px';
+            compObsContainer.style.backgroundColor = '#ffffff';
+            compObsContainer.style.color = '#000000';
+            compObsContainer.style.fontFamily = 'Arial, sans-serif';
+            compObsContainer.style.fontSize = '13.33px'; // 10pt
+            compObsContainer.style.lineHeight = '1.15';
+            
+            const compTitle = document.createElement('h3');
+            compTitle.textContent = 'Observaciones Complementarias';
+            compTitle.style.margin = '0 0 10px 0';
+            compTitle.style.fontSize = '16px';
+            compTitle.style.borderBottom = '1px solid #ccc';
+            compTitle.style.paddingBottom = '5px';
+            compObsContainer.appendChild(compTitle);
+            
+            const compText = document.createElement('div');
+            compText.style.whiteSpace = 'pre-wrap';
+            compText.style.wordBreak = 'break-word';
+            compText.textContent = obsText;
+            compObsContainer.appendChild(compText);
+            
+            document.body.appendChild(compObsContainer);
+            
+            try {
+                const compCanvas = await h2c(compObsContainer, {
+                    scale: deviceScale,
+                    useCORS: true,
+                    backgroundColor: '#ffffff'
+                });
+                const compImg = compCanvas.toDataURL('image/png');
+                
+                pdf.addPage();
+                const compScaledWidth = pageWidth - margin * 2;
+                const compScaledHeight = (compCanvas.height * compScaledWidth) / compCanvas.width;
+                
+                let compHeightLeft = compScaledHeight;
+                let compPosY = margin;
+                
+                pdf.addImage(compImg, 'PNG', margin, compPosY, compScaledWidth, compScaledHeight);
+                compHeightLeft -= (pageHeight - margin * 2);
+                
+                while (compHeightLeft > 0) {
+                    pdf.addPage();
+                    compPosY = margin - (compScaledHeight - compHeightLeft);
+                    pdf.addImage(compImg, 'PNG', margin, compPosY, compScaledWidth, compScaledHeight);
+                    compHeightLeft -= (pageHeight - margin * 2);
+                }
+            } catch (e) {
+                console.warn('No se pudo renderizar Observaciones Complementarias:', e);
+            } finally {
+                compObsContainer.remove();
+            }
+        }
+
         const title = document.getElementById('current-month')?.textContent || 'Calendario';
         const safeTitle = title.replace(/\s+/g, '_');
         pdf.save(`Calendario_${safeTitle}.pdf`);
@@ -2815,6 +3045,86 @@ function exportCalendarToExcel() {
     }
 }
 
+// Helper para obtener el horario programado/esperado de un personal en una fecha
+function getExpectedSchedule(personalId, dateStr) {
+    const persona = personal.find(p => p.id === personalId);
+    if (!persona || !persona.workSchedule) return null;
+
+    const ws = persona.workSchedule;
+    const fParts = dateStr.split('-');
+    // Parsear fecha explícitamente
+    const fDate = new Date(parseInt(fParts[0]), parseInt(fParts[1]) - 1, parseInt(fParts[2]));
+    const dow = fDate.getDay();
+
+    if (ws.type === 'per_day' && ws.perDay && ws.perDay[String(dow)]) {
+        const info = ws.perDay[String(dow)];
+        if (info && info.start) {
+            return { start: info.start, end: info.end || '' };
+        }
+    } else if (Array.isArray(ws.days) && ws.days.includes(dow)) {
+        if (ws.start) {
+            return { start: ws.start, end: ws.end || '' };
+        }
+    }
+    return null;
+}
+
+// Función para calcular y mostrar demora/adelanto en asistencia
+function updateAsistenciaCalculo() {
+    const horaEntrada = document.getElementById('hora-entrada').value;
+    const horaSalida = document.getElementById('hora-salida').value;
+    
+    // Obtener horario esperado desde los inputs explícitos
+    const expectedStart = document.getElementById('hora-programada-entrada').value;
+    const expectedEnd = document.getElementById('hora-programada-salida').value;
+    
+    const display = document.getElementById('asistencia-calculo');
+    
+    if (!display) return;
+    
+    let messages = [];
+    let isBad = false;
+    
+    // Comparar Hora Entrada (Actual) vs Expected Start (Programado)
+    if (horaEntrada && expectedStart) {
+        const actual = timeStrToMinutes(horaEntrada);
+        const programado = timeStrToMinutes(expectedStart);
+        
+        if (actual !== null && programado !== null) {
+            const diff = actual - programado;
+            if (diff > 0) {
+                messages.push(`⚠️ Llegada Tarde: ${diff} min (vs ${expectedStart})`);
+                isBad = true;
+            } else if (diff < 0) {
+                // messages.push(`Llegada Anticipada: ${Math.abs(diff)} min`);
+            }
+        }
+    }
+    
+    // Comparar Hora Salida (Actual) vs Expected End (Programado)
+    if (horaSalida && expectedEnd) {
+        const actual = timeStrToMinutes(horaSalida);
+        const programado = timeStrToMinutes(expectedEnd);
+        
+        if (actual !== null && programado !== null) {
+            const diff = programado - actual; // programado > actual means left early
+            if (diff > 0) {
+                messages.push(`⚠️ Salida Anticipada: ${diff} min (vs ${expectedEnd})`);
+                isBad = true;
+            } else if (diff < 0) {
+                // messages.push(`Salida Tardía (Overtime): ${Math.abs(diff)} min`);
+            }
+        }
+    }
+    
+    if (messages.length > 0) {
+        display.innerHTML = messages.join('<br>');
+        display.style.color = isBad ? '#dc3545' : '#28a745';
+    } else {
+        display.textContent = '';
+    }
+}
+
 // Funciones para el manejo de turnos
 function openTurnoModal(personalId, fecha, turno = null) {
     if (!isAdmin()) {
@@ -2873,9 +3183,35 @@ function openTurnoModal(personalId, fecha, turno = null) {
     const modalTitle = document.getElementById('turno-modal-title');
     modalTitle.textContent = `Turno: ${nombreCompleto} - ${fechaFormateada}`;
     
-    // Siempre limpiar horarios antes de cargar datos del turno actual
+    // Nuevos campos para Horario Programado
+    const horaProgramadaEntrada = document.getElementById('hora-programada-entrada');
+    const horaProgramadaSalida = document.getElementById('hora-programada-salida');
+
+    // Limpiar campos
     if (horaEntrada) horaEntrada.value = '';
     if (horaSalida) horaSalida.value = '';
+    if (horaProgramadaEntrada) horaProgramadaEntrada.value = '';
+    if (horaProgramadaSalida) horaProgramadaSalida.value = '';
+    
+    // Calcular horario esperado (Perfil)
+    const expected = getExpectedSchedule(personalId, fecha);
+    
+    // Pre-llenar Programado con Perfil (default)
+    if (expected) {
+        if (horaProgramadaEntrada) horaProgramadaEntrada.value = expected.start || '';
+        if (horaProgramadaSalida) horaProgramadaSalida.value = expected.end || '';
+    }
+    
+    // Añadir listeners de cálculo a los horarios programados si no los tienen
+    if (horaProgramadaEntrada && !horaProgramadaEntrada.dataset.calcBound) {
+        horaProgramadaEntrada.addEventListener('change', updateAsistenciaCalculo);
+        horaProgramadaEntrada.dataset.calcBound = '1';
+    }
+    if (horaProgramadaSalida && !horaProgramadaSalida.dataset.calcBound) {
+        horaProgramadaSalida.addEventListener('change', updateAsistenciaCalculo);
+        horaProgramadaSalida.dataset.calcBound = '1';
+    }
+
     // Foco automático del modal de turno: de Entrada a Salida
     if (horaEntrada && horaSalida && !horaEntrada.dataset.focusBound) {
         const goToSalida = () => { try { horaSalida.focus(); } catch {} };
@@ -2884,10 +3220,30 @@ function openTurnoModal(personalId, fecha, turno = null) {
         horaEntrada.dataset.focusBound = '1';
     }
 
+    // Añadir listeners de cálculo a los horarios reales si no los tienen
+    if (horaEntrada && !horaEntrada.dataset.calcBound) {
+        horaEntrada.addEventListener('change', updateAsistenciaCalculo);
+        horaEntrada.dataset.calcBound = '1';
+    }
+    if (horaSalida && !horaSalida.dataset.calcBound) {
+        horaSalida.addEventListener('change', updateAsistenciaCalculo);
+        horaSalida.dataset.calcBound = '1';
+    }
+
     if (turno) {
         tipoTurnoSelect.value = turno.tipo;
         if (turno.horaEntrada) horaEntrada.value = turno.horaEntrada;
         if (turno.horaSalida) horaSalida.value = turno.horaSalida;
+        
+        // Si el turno tiene horario programado explícito guardado, sobreescribir el del perfil
+        if (turno.horaProgramadaEntrada && horaProgramadaEntrada) {
+            horaProgramadaEntrada.value = turno.horaProgramadaEntrada;
+        }
+        if (turno.horaProgramadaSalida && horaProgramadaSalida) {
+            horaProgramadaSalida.value = turno.horaProgramadaSalida;
+        }
+        
+        updateAsistenciaCalculo();
 
         // Configurar observaciones en modo lectura
         let observacionesText = turno.observaciones || '';
@@ -3050,6 +3406,14 @@ function handleTurnoSubmit(e) {
     const tipo = document.getElementById('turno-tipo').value;
     const horaEntrada = document.getElementById('hora-entrada').value;
     const horaSalida = document.getElementById('hora-salida').value;
+    
+    // Obtener horario programado esperado desde los inputs explícitos
+    const horaProgramadaEntradaVal = document.getElementById('hora-programada-entrada').value;
+    const horaProgramadaSalidaVal = document.getElementById('hora-programada-salida').value;
+
+    // Nota: Eliminada validación de asistencia real manual ya que ahora se compara contra el perfil o lo programado manualmente
+
+
     const observaciones = document.getElementById('turno-observaciones').value;
     const prevTurno = (turnos[fecha] && turnos[fecha][personalId]) ? turnos[fecha][personalId] : null;
     
@@ -3263,6 +3627,8 @@ function handleTurnoSubmit(e) {
         tipo,
         horaEntrada,
         horaSalida,
+        horaProgramadaEntrada: horaProgramadaEntradaVal,
+        horaProgramadaSalida: horaProgramadaSalidaVal,
         observaciones,
         ...conditionalData
     };
@@ -3360,6 +3726,34 @@ function handleTurnoSubmit(e) {
     });
 }
 
+function isScheduledWorkDay(p, dateObj) {
+    const ws = p && p.workSchedule;
+    if (!ws) return false;
+    
+    const y = dateObj.getFullYear();
+    const m = dateObj.getMonth();
+    const d = dateObj.getDate();
+    const dow = dateObj.getDay();
+
+    // Verificar feriados
+    const isSadofe = p.modalidadTrabajo === 'sadofe';
+    const days = ws.days || [];
+    const isWeekendWorker = Array.isArray(days) && (days.includes(0) || days.includes(6));
+    const effectiveSadofe = isSadofe || (isWeekendWorker && ws.applyHolidays);
+
+    const allowHoliday = Boolean(ws.applyHolidays) || effectiveSadofe;
+    const isHol = (typeof isHoliday === 'function') ? isHoliday(y, m, d) : false;
+    if (isHol && !allowHoliday) return false;
+    
+    // Obtener horario según configuración
+    if (ws.type === 'per_day' && ws.perDay && ws.perDay[String(dow)]) {
+       return !!ws.perDay[String(dow)].start;
+    } else if (Array.isArray(ws.days) && (ws.days.includes(dow) || (isHol && effectiveSadofe)) && ws.start) {
+        return true;
+    }
+    return false;
+}
+
 function handleDeleteTurno() {
     if (!isAdmin()) {
         showNotification('Acción restringida. Solo el admin puede eliminar turnos.');
@@ -3383,7 +3777,16 @@ function handleDeleteTurno() {
             const rolCG = esCambioGuardia ? turno.rolCG : null;
             const fechaDevolucion = esCambioGuardia ? turno.fechaDevolucion : null;
             const fechaCambio = esCambioGuardia ? turno.fechaCambio : null;
-            delete turnos[fecha][personalId];
+            
+            // Decidir si borrar o marcar como vacío (si hay horario programado de base)
+            const persona = personal.find(p => p.id === personalId);
+            const dateObj = parseDateLocal(fecha);
+            if (persona && dateObj && isScheduledWorkDay(persona, dateObj)) {
+                turnos[fecha][personalId] = { tipo: 'vacio', observaciones: '' };
+            } else {
+                delete turnos[fecha][personalId];
+            }
+
             // Si era cambio de guardia, eliminar el par correspondiente en la otra fecha/persona
             if (esCambioGuardia && companeroId) {
                 if (rolCG === 'cubre' && fechaDevolucion) {
@@ -4140,16 +4543,24 @@ function removeMultiDayEvent(personalId, fechaInicio, fechaFin) {
         return;
     }
     
+    // Obtener la persona una vez
+    const persona = personal.find(p => p.id === personalId);
+
     const currentDate = new Date(startDate);
     while (currentDate <= endDate) {
         const dateStr = formatDate(currentDate);
         
         if (turnos[dateStr] && turnos[dateStr][personalId]) {
-            delete turnos[dateStr][personalId];
-            
-            // Si no hay más turnos en esta fecha, eliminar la fecha completa
-            if (Object.keys(turnos[dateStr]).length === 0) {
-                delete turnos[dateStr];
+            // Decidir si borrar o marcar como vacío
+            if (persona && isScheduledWorkDay(persona, currentDate)) {
+                turnos[dateStr][personalId] = { tipo: 'vacio', observaciones: '' };
+            } else {
+                delete turnos[dateStr][personalId];
+                
+                // Si no hay más turnos en esta fecha, eliminar la fecha completa
+                if (Object.keys(turnos[dateStr]).length === 0) {
+                    delete turnos[dateStr];
+                }
             }
         }
         
@@ -4160,12 +4571,13 @@ function removeMultiDayEvent(personalId, fechaInicio, fechaFin) {
 // Persistencia de datos
 function saveData() {
     try {
-        const { pKey, tKey } = getDataKeys();
+        const { pKey, tKey, oKey } = getDataKeys();
 
         // Intentar usar localStorage primero
         if (typeof(Storage) !== "undefined") {
             localStorage.setItem(pKey, JSON.stringify(personal));
             localStorage.setItem(tKey, JSON.stringify(turnos));
+            localStorage.setItem(oKey, JSON.stringify(pdfObservations));
             console.log(`Datos guardados correctamente en localStorage (${pKey})`);
             // Respaldo automático versionado (throttled)
             scheduleAutoBackup();
@@ -4173,15 +4585,17 @@ function saveData() {
             // Fallback: usar cookies si localStorage no está disponible
             setCookie(pKey, JSON.stringify(personal), 365);
             setCookie(tKey, JSON.stringify(turnos), 365);
+            setCookie(oKey, JSON.stringify(pdfObservations), 365);
             console.log('Datos guardados en cookies (fallback)');
         }
     } catch (e) {
         console.error('Error guardando datos:', e);
         // Intentar fallback con cookies
         try {
-            const { pKey, tKey } = getDataKeys();
+            const { pKey, tKey, oKey } = getDataKeys();
             setCookie(pKey, JSON.stringify(personal), 365);
             setCookie(tKey, JSON.stringify(turnos), 365);
+            setCookie(oKey, JSON.stringify(pdfObservations), 365);
             showNotification('Datos guardados usando cookies (modo compatibilidad)');
         } catch (cookieError) {
             console.error('Error guardando en cookies:', cookieError);
@@ -4941,32 +5355,36 @@ function saveUsers() {
 function getDataKeys() {
     let pKey = 'vigilancia-personal';
     let tKey = 'vigilancia-turnos';
+    let oKey = 'vigilancia-pdf-obs';
     
     // Si hay usuario logueado y es un usuario creado (aislado)
     if (currentUser && users.some(u => u.username === currentUser.username)) {
         pKey = `vigilancia-personal-${currentUser.username}`;
         tKey = `vigilancia-turnos-${currentUser.username}`;
+        oKey = `vigilancia-pdf-obs-${currentUser.username}`;
     }
-    return { pKey, tKey };
+    return { pKey, tKey, oKey };
 }
 
 function loadData() {
     loadUsers(); // Asegurar que users estén cargados
     
     try {
-        let savedPersonal, savedTurnos;
-        const { pKey, tKey } = getDataKeys();
+        let savedPersonal, savedTurnos, savedObs;
+        const { pKey, tKey, oKey } = getDataKeys();
         
         // Intentar cargar desde localStorage primero
         if (typeof(Storage) !== "undefined") {
             savedPersonal = localStorage.getItem(pKey);
             savedTurnos = localStorage.getItem(tKey);
+            savedObs = localStorage.getItem(oKey);
         }
         
         // Si no hay datos en localStorage, intentar cookies
         if (!savedPersonal || !savedTurnos) {
             savedPersonal = savedPersonal || getCookie(pKey);
             savedTurnos = savedTurnos || getCookie(tKey);
+            savedObs = savedObs || getCookie(oKey);
         }
         
         if (savedPersonal) {
@@ -5010,8 +5428,31 @@ function loadData() {
         } else {
             turnos = {};
         }
+
+        if (savedObs) {
+            try {
+                const parsed = JSON.parse(savedObs);
+                // Si es un objeto, lo usamos. Si es string (legacy), lo migramos?
+                // Mejor simplemente validar que sea objeto
+                if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+                    pdfObservations = parsed;
+                } else if (typeof parsed === 'string') {
+                    // Migración simple: si era string, asignarlo a una key genérica o descartar?
+                    // Como acabamos de implementar esto, asumimos que string es inválido para el nuevo formato
+                    // O podríamos asignarlo al mes actual si supiéramos cuál es, pero mejor resetear para evitar confusión
+                    pdfObservations = {};
+                } else {
+                    pdfObservations = {};
+                }
+            } catch (e) {
+                console.error('Error parsing pdfObservations data:', e);
+                pdfObservations = {};
+            }
+        } else {
+            pdfObservations = {};
+        }
         
-        console.log(`Datos cargados (${pKey}):`, { personal: personal.length, turnos: Object.keys(turnos).length });
+        console.log(`Datos cargados (${pKey}):`, { personal: personal.length, turnos: Object.keys(turnos).length, obs: Object.keys(pdfObservations).length });
     } catch (e) {
         console.error('Error accediendo a almacenamiento:', e);
         showNotification('Advertencia: No se pudieron cargar los datos guardados.');
@@ -6261,4 +6702,125 @@ function openSettingsModal() {
 function sanitizeTypeId(str) {
     if (!str) return '';
     return String(str).trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+}
+
+// --- Gestión de Observaciones Complementarias para PDF ---
+function setupPdfObservationsListeners() {
+    const btn = document.getElementById('pdf-obs-btn');
+    const modal = document.getElementById('pdf-obs-modal');
+    const closeBtn = document.getElementById('close-pdf-obs-btn');
+    const cancelBtn = document.getElementById('cancel-pdf-obs-btn');
+    const form = document.getElementById('pdf-obs-form');
+    const textArea = document.getElementById('pdf-obs-text');
+    const counter = document.getElementById('pdf-obs-counter');
+    const errorMsg = document.getElementById('pdf-obs-error');
+
+    if (!btn || !modal) return;
+
+    // Abrir modal
+    btn.addEventListener('click', () => {
+        // Verificar si el usuario es superadmin
+        if (!currentUser || currentUser.role !== 'superadmin') {
+            showNotification('Solo los superadministradores pueden agregar observaciones al PDF.');
+            return;
+        }
+
+        const key = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+        // Asegurar que pdfObservations sea un objeto
+        if (typeof pdfObservations !== 'object' || pdfObservations === null) {
+            pdfObservations = {};
+        }
+        
+        if (textArea) textArea.value = pdfObservations[key] || '';
+        updateCounter();
+        
+        // Actualizar título del modal para indicar el mes
+        const modalTitle = modal.querySelector('h2');
+        if (modalTitle) {
+            const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+            modalTitle.textContent = `Observaciones PDF - ${monthNames[currentMonth]} ${currentYear}`;
+        }
+
+        modal.style.display = 'block';
+        if (textArea) textArea.focus();
+    });
+
+    // Cerrar modal
+    const close = () => {
+        modal.style.display = 'none';
+        if (errorMsg) errorMsg.style.display = 'none';
+    };
+
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    if (cancelBtn) cancelBtn.addEventListener('click', close);
+    
+    // Cerrar al hacer clic fuera
+    window.addEventListener('click', (e) => {
+        if (e.target === modal) close();
+    });
+
+    // Contador y Validación en tiempo real
+    const updateCounter = () => {
+        if (!textArea || !counter) return;
+        const len = textArea.value.length;
+        counter.textContent = `${len}/500`;
+        if (len >= 500) {
+            counter.style.color = '#dc3545';
+        } else {
+            counter.style.color = '#666';
+        }
+        
+        // Validación de caracteres
+        const validation = validatePdfObservations(textArea.value);
+        if (!validation.valid) {
+            if (errorMsg) {
+                errorMsg.textContent = validation.message;
+                errorMsg.style.display = 'block';
+            }
+        } else {
+            if (errorMsg) errorMsg.style.display = 'none';
+        }
+    };
+
+    if (textArea) {
+        textArea.addEventListener('input', updateCounter);
+    }
+
+    // Guardar
+    if (form) {
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = textArea.value;
+            const validation = validatePdfObservations(text);
+            
+            if (!validation.valid) {
+                showNotification(validation.message);
+                return;
+            }
+
+            const key = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+            if (typeof pdfObservations !== 'object' || pdfObservations === null) {
+                pdfObservations = {};
+            }
+            
+            pdfObservations[key] = text;
+            saveData(); // Persistir cambios
+            showNotification('Observaciones para PDF guardadas correctamente.');
+            close();
+        });
+    }
+}
+
+function validatePdfObservations(text) {
+    if (!text) return { valid: true };
+    
+    if (/[<>{}]/.test(text)) {
+        return { valid: false, message: 'El texto contiene caracteres no permitidos (<, >, {, }).' };
+    }
+    
+    if (text.length > 500) {
+        return { valid: false, message: 'El texto excede los 500 caracteres.' };
+    }
+
+    return { valid: true };
 }
