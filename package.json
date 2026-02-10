@@ -1,0 +1,10 @@
+{
+  "name": "calendario2026",
+  "version": "1.0.0",
+  "description": "Sistema de gestión de turnos",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/integration_test.js"
+  },
+  "dependencies": {}
+}

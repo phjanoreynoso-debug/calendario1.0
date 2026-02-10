@@ -2403,6 +2403,8 @@ function autoMarkScheduledShifts(checkAllDays = true) {
                             tipo: 'guardia_fija',
                             horaEntrada: startVal,
                             horaSalida: endVal,
+                            horaProgramadaEntrada: startVal,
+                            horaProgramadaSalida: endVal,
                             observaciones: ''
                         };
                         changed = true;
@@ -2828,6 +2830,8 @@ function openTurnoModal(personalId, fecha, turno = null) {
     const tipoTurnoSelect = document.getElementById('turno-tipo');
     const horaEntrada = document.getElementById('hora-entrada');
     const horaSalida = document.getElementById('hora-salida');
+    const horaProgramadaEntrada = document.getElementById('hora-programada-entrada');
+    const horaProgramadaSalida = document.getElementById('hora-programada-salida');
     const observaciones = document.getElementById('turno-observaciones');
     const observacionesBtn = document.getElementById('observaciones-btn');
     const observacionesPreview = document.getElementById('observaciones-preview');
@@ -2876,6 +2880,8 @@ function openTurnoModal(personalId, fecha, turno = null) {
     // Siempre limpiar horarios antes de cargar datos del turno actual
     if (horaEntrada) horaEntrada.value = '';
     if (horaSalida) horaSalida.value = '';
+    if (horaProgramadaEntrada) horaProgramadaEntrada.value = '';
+    if (horaProgramadaSalida) horaProgramadaSalida.value = '';
     // Foco automático del modal de turno: de Entrada a Salida
     if (horaEntrada && horaSalida && !horaEntrada.dataset.focusBound) {
         const goToSalida = () => { try { horaSalida.focus(); } catch {} };
@@ -2888,6 +2894,8 @@ function openTurnoModal(personalId, fecha, turno = null) {
         tipoTurnoSelect.value = turno.tipo;
         if (turno.horaEntrada) horaEntrada.value = turno.horaEntrada;
         if (turno.horaSalida) horaSalida.value = turno.horaSalida;
+        if (turno.horaProgramadaEntrada && horaProgramadaEntrada) horaProgramadaEntrada.value = turno.horaProgramadaEntrada;
+        if (turno.horaProgramadaSalida && horaProgramadaSalida) horaProgramadaSalida.value = turno.horaProgramadaSalida;
 
         // Configurar observaciones en modo lectura
         let observacionesText = turno.observaciones || '';
@@ -2932,11 +2940,23 @@ function openTurnoModal(personalId, fecha, turno = null) {
             
             if (ws.type === 'per_day' && ws.perDay && ws.perDay[String(dow)]) {
                 const info = ws.perDay[String(dow)];
-                if (info && info.start && horaEntrada) horaEntrada.value = info.start;
-                if (info && info.end && horaSalida) horaSalida.value = info.end || '';
+                if (info && info.start && horaEntrada) {
+                    horaEntrada.value = info.start;
+                    if (horaProgramadaEntrada) horaProgramadaEntrada.value = info.start;
+                }
+                if (info && info.end && horaSalida) {
+                    horaSalida.value = info.end || '';
+                    if (horaProgramadaSalida) horaProgramadaSalida.value = info.end || '';
+                }
             } else if (Array.isArray(ws.days) && ws.days.includes(dow)) {
-                if (ws.start && horaEntrada) horaEntrada.value = ws.start;
-                if (ws.end && horaSalida) horaSalida.value = ws.end || '';
+                if (ws.start && horaEntrada) {
+                    horaEntrada.value = ws.start;
+                    if (horaProgramadaEntrada) horaProgramadaEntrada.value = ws.start;
+                }
+                if (ws.end && horaSalida) {
+                    horaSalida.value = ws.end || '';
+                    if (horaProgramadaSalida) horaProgramadaSalida.value = ws.end || '';
+                }
             }
         }
         
@@ -3050,6 +3070,8 @@ function handleTurnoSubmit(e) {
     const tipo = document.getElementById('turno-tipo').value;
     const horaEntrada = document.getElementById('hora-entrada').value;
     const horaSalida = document.getElementById('hora-salida').value;
+    const horaProgramadaEntrada = document.getElementById('hora-programada-entrada').value;
+    const horaProgramadaSalida = document.getElementById('hora-programada-salida').value;
     const observaciones = document.getElementById('turno-observaciones').value;
     const prevTurno = (turnos[fecha] && turnos[fecha][personalId]) ? turnos[fecha][personalId] : null;
     
@@ -3263,6 +3285,8 @@ function handleTurnoSubmit(e) {
         tipo,
         horaEntrada,
         horaSalida,
+        horaProgramadaEntrada,
+        horaProgramadaSalida,
         observaciones,
         ...conditionalData
     };
@@ -6261,4 +6285,109 @@ function openSettingsModal() {
 function sanitizeTypeId(str) {
     if (!str) return '';
     return String(str).trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+}
+
+// Helper para obtener historial de anomalías (llegadas tarde / salidas antes)
+function getAnomalyHistory(personalId, year) {
+    const anomalies = [];
+    if (!turnos) return anomalies;
+    
+    // Time helper (duplicated but safe)
+    const timeToMin = (t) => {
+        if (!t || typeof t !== 'string') return null;
+        const [h, m] = t.split(':').map(Number);
+        return h * 60 + m;
+    };
+
+    Object.keys(turnos).forEach(dateStr => {
+        if (!turnos[dateStr]) return;
+        const parts = dateStr.split('-');
+        if (year && parseInt(parts[0], 10) !== parseInt(year, 10)) return;
+
+        const t = turnos[dateStr][personalId];
+        if (t) {
+            // Late
+            if (t.horaEntrada && t.horaProgramadaEntrada) {
+                const actual = timeToMin(t.horaEntrada);
+                const scheduled = timeToMin(t.horaProgramadaEntrada);
+                if (actual !== null && scheduled !== null && actual > scheduled) {
+                    anomalies.push({
+                        date: dateStr,
+                        type: 'late',
+                        diff: actual - scheduled,
+                        actual: t.horaEntrada,
+                        scheduled: t.horaProgramadaEntrada
+                    });
+                }
+            }
+            // Early
+            if (t.horaSalida && t.horaProgramadaSalida) {
+                const actual = timeToMin(t.horaSalida);
+                const scheduled = timeToMin(t.horaProgramadaSalida);
+                if (actual !== null && scheduled !== null && actual < scheduled) {
+                    anomalies.push({
+                        date: dateStr,
+                        type: 'early',
+                        diff: scheduled - actual,
+                        actual: t.horaSalida,
+                        scheduled: t.horaProgramadaSalida
+                    });
+                }
+            }
+        }
+    });
+    return anomalies;
+}
+
+// Función para mostrar detalles de anomalías en el modal
+function showReportAnomalyDetails(personalId, year) {
+    const p = personal.find(x => x.id === personalId);
+    if (!p) return;
+
+    const modal = document.getElementById('details-modal');
+    const title = document.getElementById('details-modal-title');
+    const list = document.getElementById('details-list');
+    
+    if (!modal || !title || !list) return;
+
+    list.innerHTML = '';
+    modal.style.display = 'block';
+    
+    title.textContent = `Llegadas Tarde / Salidas Antes ${year} - ${p.apellido}, ${p.nombre}`;
+
+    const anomalies = getAnomalyHistory(personalId, year);
+    // Sort desc
+    anomalies.sort((a, b) => b.date.localeCompare(a.date));
+
+    // Helper
+    const fmt = (d) => {
+        if (!d) return '';
+        const parts = d.split('-');
+        if (parts.length !== 3) return d;
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    };
+
+    if (anomalies.length === 0) {
+        list.innerHTML = '<li style="color: #666;">No hay registros para este año.</li>';
+    } else {
+        anomalies.forEach(e => {
+            const li = document.createElement('li');
+            const dateFmt = fmt(e.date);
+            
+            let text = '';
+            let color = '';
+            
+            if (e.type === 'late') {
+                text = `${dateFmt}: Llegada Tarde (${e.diff} min) - ${e.actual} vs ${e.scheduled}`;
+                color = '#dc3545'; // Red
+            } else {
+                text = `${dateFmt}: Salida Antes (${e.diff} min) - ${e.actual} vs ${e.scheduled}`;
+                color = '#d97706'; // Orange
+            }
+            
+            li.textContent = text;
+            li.style.color = color;
+            list.appendChild(li);
+        });
+    }
 }

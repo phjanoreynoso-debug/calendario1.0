@@ -51,6 +51,7 @@
                     <div class="menu-actions">
                         <button id="manage-personal-btn" class="btn-primary"><i class="fas fa-users"></i> Gestionar Personal</button>
                         <button id="view-stats-btn" class="btn-info"><i class="fas fa-chart-bar"></i> Ver Estadísticas</button>
+                        <button id="hb-view-reports-btn" class="btn-info" style="display: none;"><i class="fas fa-list-alt"></i> Ver Reportes</button>
                         <button id="export-data-btn" class="btn-info" style="display: none;"><i class="fas fa-file-export"></i> Exportar Datos</button>
                         <button id="import-data-btn" class="btn-secondary" style="display: none;"><i class="fas fa-file-import"></i> Importar Datos</button>
                         <button id="settings-btn" class="btn-info"><i class="fas fa-cog"></i> Configuraciones</button>
@@ -69,6 +70,7 @@
                     <button id="prev-month" class="btn-secondary" type="button" title="Mes anterior" aria-label="Mes anterior"><i class="fas fa-chevron-left"></i></button>
                     <span id="current-month" class="current-month-label">Mes Actual</span>
                     <button id="next-month" class="btn-secondary" type="button" title="Mes siguiente" aria-label="Mes siguiente"><i class="fas fa-chevron-right"></i></button>
+                    <button type="button" id="view-reports-btn" class="btn-info" title="Ver Reportes" aria-label="Ver Reportes"><i class="fas fa-list-alt"></i> Reportes</button>
                     <label for="sector-input" class="sector-label">Sector:</label>
                     <input id="sector-input" type="text" placeholder="Ej: Sector" aria-label="Sector para el PDF" />
                     <button type="button" id="pdf-obs-btn" class="btn-secondary" title="Observaciones PDF" aria-label="Añadir observaciones al PDF"><i class="fas fa-comment-alt"></i></button>
@@ -199,6 +201,45 @@
                             <!-- Aquí se cargarán dinámicamente los logs de movimientos -->
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal de Reportes -->
+        <div id="reports-modal" class="modal">
+            <div class="modal-content" style="max-width: 95%; width: 1100px;">
+                <span class="close" id="close-reports-btn">&times;</span>
+                <div class="section-header">
+                    <h2>Reporte de Horas, Compensatorios y Novedades</h2>
+                </div>
+                <div class="report-controls" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background-color: #f8f9fa; padding: 10px; border-radius: 6px;">
+                    <div style="flex: 1; min-width: 250px;">
+                        <label for="report-search-input" style="font-weight: 600; margin-right: 5px;">Buscar Personal:</label>
+                        <input type="text" id="report-search-input" placeholder="Nombre o Apellido..." style="padding: 8px; border-radius: 4px; border: 1px solid #ccc; width: 100%; max-width: 300px;">
+                    </div>
+                    <div>
+                         <label for="report-year-select" style="font-weight: 600; margin-right: 5px;">Año:</label>
+                         <select id="report-year-select" style="padding: 8px; border-radius: 4px; border: 1px solid #ccc;">
+                             <!-- JS Populate -->
+                         </select>
+                    </div>
+                    <button id="refresh-report-btn" class="btn-secondary"><i class="fas fa-sync"></i> Actualizar</button>
+                </div>
+                <div class="report-container" style="max-height: 65vh; overflow-y: auto;">
+                    <table id="reports-table" class="modern-table" style="width: 100%; font-size: 0.9em;">
+                        <thead style="position: sticky; top: 0; background: white; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            <tr>
+                                <th>Personal</th>
+                                <th title="Total Horas Extras acumuladas">Horas Extras</th>
+                                <th title="Saldo disponible (Generados - Usados)">Comp. a favor</th>
+                                <th title="Días compensatorios tomados">Comp. Usados</th>
+                                <th title="Llegadas tarde y salidas anticipadas">Llegadas Tarde / Salidas Antes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reports-body">
+                            <!-- Dynamic content -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -600,7 +641,7 @@
                                 </select>
                             </div>
                             
-                            <div class="form-group asistencia-group" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                            <div class="form-group asistencia-group horario-group" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
                                 
                                 <div style="margin-bottom: 15px;">
                                     <div style="font-size: 0.9em; font-weight: 600; color: #333; margin-bottom: 8px;">Horario del Turno</div>
@@ -639,6 +680,27 @@
                                     Cantidad Horaria: <span id="cantidad-horaria-display">0 hs</span>
                                 </div>
                                 <div id="asistencia-calculo" style="margin-top: 5px; font-size: 0.9em; color: #d9534f; font-weight: 600; min-height: 1.2em;"></div>
+                            </div>
+
+                            <!-- Campos para Extras en Guardia -->
+                            <div id="campos-guardia-extras" class="conditional-fields" style="display: none; margin-top: 20px; padding: 15px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #166534; border-radius: 6px;">
+                                <div style="font-size: 0.95em; font-weight: 600; color: #166534; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                                    <i class="fas fa-plus-circle"></i> Adicionales
+                                </div>
+                                <div style="display: flex; gap: 15px;">
+                                    <div class="form-group" style="flex: 1; display: flex; flex-direction: column;">
+                                        <label for="compensatorio-generado" style="display: block; margin-bottom: 6px; font-size: 0.85em; color: #166534; font-weight: 500;">Compensatorios Generados:</label>
+                                        <div style="position: relative; margin-top: auto;">
+                                            <input type="number" step="0.5" id="compensatorio-generado" name="compensatorio-generado" placeholder="0" style="width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #86efac; border-radius: 4px; background-color: white; color: #14532d;">
+                                        </div>
+                                    </div>
+                                    <div class="form-group" style="flex: 1; display: flex; flex-direction: column;">
+                                        <label for="horas-extras" style="display: block; margin-bottom: 6px; font-size: 0.85em; color: #166534; font-weight: 500;">Horas Extras:</label>
+                                        <div style="position: relative; margin-top: auto;">
+                                            <input type="number" step="0.5" id="horas-extras" name="horas-extras" placeholder="0" style="width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #86efac; border-radius: 4px; background-color: white; color: #14532d;">
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Campos condicionales según tipo de solicitud -->
@@ -680,8 +742,37 @@
                             <!-- Campos para Compensatorio -->
                             <div id="campos-compensatorio" class="conditional-fields" style="display: none;">
                                 <div class="form-group">
-                                    <label for="fecha-trabajo-realizado">Fecha del Día Realizado:</label>
-                                    <input type="date" id="fecha-trabajo-realizado" name="fecha-trabajo-realizado">
+                                    <label for="fecha-trabajo-realizado">Fecha del Día Realizado (Origen):</label>
+                                    <select id="fecha-trabajo-realizado" name="fecha-trabajo-realizado" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc; background-color: #fff;">
+                                        <option value="">Seleccione una fecha disponible...</option>
+                                    </select>
+                                </div>
+                                <div id="balance-compensatorio-display" style="margin-top: 10px; font-weight: bold; color: #0284c7; padding: 8px; background-color: #e0f2fe; border-radius: 4px;">
+                                    Compensatorios disponibles: Cargando...
+                                </div>
+                            </div>
+
+                            <!-- Campos para Guardia (Generación de Compensatorios y Horas Extras) -->
+                            <div id="campos-guardia-compensatorio" class="conditional-fields" style="display: none; background-color: #f0fdf4; padding: 10px; border-radius: 6px; border: 1px solid #bbf7d0; margin-top: 10px;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                                    <input type="checkbox" id="genera-compensatorio" name="genera-compensatorio" style="width: auto;">
+                                    <label for="genera-compensatorio" style="margin-bottom: 0; font-weight: 600; color: #166534; cursor: pointer;">Genera día compensatorio</label>
+                                </div>
+                                <div id="cantidad-compensatorio-container" style="display: none;">
+                                    <div class="form-group">
+                                        <label for="cantidad-dias-compensatorio" style="color: #166534;">Cantidad de días a agregar:</label>
+                                        <input type="number" id="cantidad-dias-compensatorio" name="cantidad-dias-compensatorio" value="1" min="0.5" step="0.5" style="border-color: #86efac; box-sizing: border-box; width: 100%;">
+                                    </div>
+                                </div>
+                                <div id="balance-guardia-display" style="margin-top: 5px; margin-bottom: 15px; font-size: 0.9em; color: #166534;">
+                                    <!-- Aquí se mostrará el saldo actual como referencia -->
+                                </div>
+                                
+                                <div style="border-top: 1px solid #bbf7d0; padding-top: 10px; margin-top: 10px;">
+                                    <div class="form-group">
+                                        <label for="horas-extras-legacy" style="color: #166534; font-weight: 600;">Horas Extras (opcional):</label>
+                                        <input type="number" id="horas-extras-legacy" name="horas-extras-legacy" min="0" step="0.5" placeholder="0" style="border-color: #86efac; box-sizing: border-box; width: 100%;">
+                                    </div>
                                 </div>
                             </div>
                             
@@ -741,6 +832,22 @@
                         <button type="button" class="btn-secondary cancel-btn">Cancelar</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para detalles de reportes -->
+    <div id="details-modal" class="modal" style="display:none">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3 id="details-modal-title">Detalles</h3>
+                <span class="close" onclick="document.getElementById('details-modal').style.display='none'">&times;</span>
+            </div>
+            <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+                <ul id="details-list" class="details-list"></ul>
+            </div>
+            <div class="modal-footer" style="text-align: right; padding-top: 10px;">
+                <button type="button" class="btn-secondary" onclick="document.getElementById('details-modal').style.display='none'">Cerrar</button>
             </div>
         </div>
     </div>
