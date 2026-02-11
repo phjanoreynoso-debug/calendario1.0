@@ -5827,6 +5827,7 @@ document.addEventListener('DOMContentLoaded', () => {
                              });
                         }
                         const newS = {
+                            ...s, // Preservar hashes de contraseñas existentes y otros campos no editados aquí
                             timezone: tzInput ? tzInput.value.trim() || 'America/Argentina/Buenos_Aires' : 'America/Argentina/Buenos_Aires',
                             codeMap,
                             customTypes
