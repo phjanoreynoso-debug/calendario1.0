@@ -7,6 +7,111 @@
     margin-bottom: 15px;
 }
 
+/* Badge in Edit Form */
+.ct-edit-form .badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: inline-block;
+    min-width: 30px;
+    text-align: center;
+    line-height: 1.2;
+}
+
+
+/* --- Custom Types Edit Form & Color Pickers --- */
+.ct-edit-header {
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.ct-edit-header h4 {
+    margin: 0;
+    color: #1e293b;
+    font-size: 1.1rem;
+}
+
+.ct-edit-form {
+    background: #f8fafc;
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid #f1f5f9;
+}
+
+.ct-pill-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.ct-pill-input:focus {
+    border-color: #3b82f6;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.ct-colors-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    margin-top: 15px;
+    margin-bottom: 15px;
+}
+
+.color-picker-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.color-picker-group label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #334155;
+}
+
+.color-input-wrapper {
+    position: relative;
+    width: 100%;
+    height: 38px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    transition: all 0.2s;
+}
+
+.color-input-wrapper:hover {
+    border-color: #94a3b8;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.color-input-swatch {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+.color-input-control {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    border: none;
+}
+
+
 .modern-form label {
     display: block;
     margin-bottom: 6px;
@@ -78,13 +183,30 @@
 }
 
 .turno-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 15px;
-    align-items: flex-start;
+    align-items: end; /* Alinea los inputs abajo para que queden parejos */
 }
 
-.turno-row .form-group {
-    flex: 1;
+/* Forzar apariencia uniforme en los inputs de esta fila */
+.turno-row .form-group input,
+.turno-row .form-group select {
+    width: 100% !important;
+    height: 42px !important;
+    padding: 8px 12px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    font-size: 0.95rem !important;
+    background-color: #fff !important;
+    color: #1e293b !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+}
+
+.turno-row .form-group label {
+    margin-bottom: 6px !important;
+    display: block;
 }
 
 /* --- Personal Modal (Editar Personal) --- */
