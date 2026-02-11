@@ -74,16 +74,25 @@ function updateCompensatorioOptions() {
     
     // Find generated compensatorios and taken compensatorios
     const options = [];
-    const takenDates = new Set();
+    const takenCounts = {}; // Map: date -> count
     
+    // Get current editing date to exclude it from "taken" count if we are editing an existing record
+    // This allows re-selecting the same source date when editing
+    const currentTurnDate = document.getElementById('turno-fecha') ? document.getElementById('turno-fecha').value : null;
+
     if (turnos) {
         Object.keys(turnos).forEach(date => {
             if (turnos[date]) {
                 const t = turnos[date][personalId];
                 if (t) {
-                    // Collect taken dates
+                    // Collect taken dates (count usage)
+                    // If we are editing the current turn (date === currentTurnDate), ignore its usage
+                    // so it doesn't block itself from being selected
                     if (t.tipo === 'compensatorio' && t.fechaTrabajoRealizado) {
-                        takenDates.add(t.fechaTrabajoRealizado);
+                         // Only count if it's NOT the current turn we are editing
+                         if (date !== currentTurnDate) {
+                             takenCounts[t.fechaTrabajoRealizado] = (takenCounts[t.fechaTrabajoRealizado] || 0) + 1;
+                         }
                     }
                     // Collect generated dates
                     if (t.tipo === 'guardia_fija' && t.compensatorioGenerado && parseFloat(t.compensatorioGenerado) > 0) {
@@ -100,8 +109,12 @@ function updateCompensatorioOptions() {
     // Sort by date descending (newest first)
     options.sort((a, b) => b.date.localeCompare(a.date));
     
-    // Filter out taken dates
-    const availableOptions = options.filter(opt => !takenDates.has(opt.date));
+    // Filter out fully used dates
+    // Available if generated amount > taken count
+    const availableOptions = options.filter(opt => {
+        const taken = takenCounts[opt.date] || 0;
+        return opt.amount > taken;
+    });
     
     if (availableOptions.length === 0) {
         const option = document.createElement('option');
@@ -3071,6 +3084,11 @@ function openTurnoModal(personalId, fecha, turno = null) {
 
     if (turno) {
         tipoTurnoSelect.value = turno.tipo;
+        
+        // Inicializar UI (visibilidad y opciones) antes de cargar datos
+        handleTipoTurnoChange();
+        populateCompaneroSelect();
+        
         if (turno.horaEntrada) horaEntrada.value = turno.horaEntrada;
         if (turno.horaSalida) horaSalida.value = turno.horaSalida;
         if (turno.horaProgramadaEntrada && horaProgramadaEntrada) horaProgramadaEntrada.value = turno.horaProgramadaEntrada;
@@ -3109,6 +3127,11 @@ function openTurnoModal(personalId, fecha, turno = null) {
         deleteTurnoBtn.style.display = 'inline-block';
     } else {
         tipoTurnoSelect.value = 'guardia_fija';
+        
+        // Inicializar UI
+        handleTipoTurnoChange();
+        populateCompaneroSelect();
+        
         // Cargar sugerencia de horario según el calendario laboral del personal
         const ws = persona && persona.workSchedule;
         if (ws) {
@@ -3152,18 +3175,22 @@ function openTurnoModal(personalId, fecha, turno = null) {
         deleteTurnoBtn.style.display = 'none';
     }
     
-    // Mostrar campos condicionales apropiados
-    handleTipoTurnoChange();
+    // Mostrar campos condicionales apropiados (Ya llamado arriba)
+    // handleTipoTurnoChange();
+    
     // Actualizar campos al cambiar el tipo
     const tipoTurnoSelectEl = document.getElementById('turno-tipo');
     if (tipoTurnoSelectEl && !tipoTurnoSelectEl.dataset.boundChange) {
         tipoTurnoSelectEl.addEventListener('change', handleTipoTurnoChange);
         tipoTurnoSelectEl.dataset.boundChange = '1';
     }
-    populateCompaneroSelect();
+    // populateCompaneroSelect();
     
     // Asegurar que estamos en modo lectura
     showObservacionesReadMode();
+    
+    // Actualizar contador de horas una vez cargados los valores
+    updateHorasContador();
     
     turnoModal.style.display = 'block';
     lockBodyScroll();
@@ -3877,17 +3904,20 @@ function scheduleAutoBackup() {
     }
 }
 
+const DATA_VERSION = 2;
+
 function getAppSnapshot() {
     // Construye un objeto completo con todos los datos persistidos
     return {
-        version: 1,
+        version: DATA_VERSION,
         exportedAt: new Date().toISOString(),
         sessionRole: (currentUser && currentUser.role) || null,
         data: {
             personal,
             turnos,
             annualLogs: getAnnualLogs(),
-            movementLogs: getMovementLogs()
+            movementLogs: getMovementLogs(),
+            settings: getSettings()
         },
         meta: {
             counts: {
@@ -3913,6 +3943,8 @@ function validateSnapshotStructure(snap) {
         if (!Array.isArray(d.annualLogs)) return false;
         // movementLogs debe ser array
         if (!Array.isArray(d.movementLogs)) return false;
+        // settings opcional pero si existe debe ser objeto
+        if (d.settings && (typeof d.settings !== 'object' || Array.isArray(d.settings))) return false;
         return true;
     } catch { return false; }
 }
@@ -3972,51 +4004,161 @@ async function importAllDataFromFile(file) {
         showNotification('Acción restringida. Solo el admin puede importar datos.');
         return;
     }
+
+    let obj;
     try {
         const text = await file.text();
-        const obj = JSON.parse(text);
-        if (!obj || obj.type !== 'vigilancia-export' || !obj.snapshot || !obj.checksum) {
-            showNotification('Archivo inválido: formato no reconocido.');
-            return;
-        }
-        const payload = JSON.stringify({ type: 'vigilancia-export', snapshot: obj.snapshot });
-        const calc = await sha256Hex(payload);
-        if (calc !== obj.checksum) {
-            showNotification('Checksum inválido: archivo alterado o corrupto.');
-            return;
-        }
-        if (!validateSnapshotStructure(obj.snapshot)) {
-            showNotification('Estructura de datos inválida.');
-            return;
-        }
-        // Confirmación antes de sobreescribir
-        showConfirmModal({
-            title: 'Confirmar importación',
-            message: 'Esto reemplazará los datos actuales. ¿Desea continuar?',
-            onAccept: () => {
-                const d = obj.snapshot.data;
-                personal = d.personal || [];
-                turnos = d.turnos || {};
-                // Persistir
-                saveData();
-                // Logs anuales
-                try { localStorage.setItem('vigilancia-annual-logs', JSON.stringify(d.annualLogs || [])); } catch {}
-                // Logs de movimientos
-                try { localStorage.setItem('vigilancia-movement-logs', JSON.stringify(d.movementLogs || [])); } catch {}
-                // Backup del import
-                saveVersionedBackup(obj);
-                renderPersonalList();
-                populateCompaneroSelect();
-                renderCalendar();
-                loadAnnualLogs();
-                loadMovementLogs();
-                showNotification('Importación realizada correctamente.');
-            },
-            onCancel: () => {}
-        });
+        obj = JSON.parse(text);
     } catch (e) {
-        console.error('Error importando datos:', e);
-        showNotification('Error leyendo el archivo de importación.');
+        showNotification('Error: El archivo no es un JSON válido.');
+        return;
+    }
+
+    // 1. Validaciones Básicas
+    if (!obj || obj.type !== 'vigilancia-export' || !obj.snapshot || !obj.checksum) {
+        showNotification('Archivo inválido: formato no reconocido.');
+        return;
+    }
+
+    // 2. Validación de Integridad (Checksum)
+    const payload = JSON.stringify({ type: 'vigilancia-export', snapshot: obj.snapshot });
+    const calc = await sha256Hex(payload);
+    if (calc !== obj.checksum) {
+        showNotification('CRÍTICO: Checksum inválido. El archivo podría estar corrupto.');
+        return;
+    }
+
+    // 3. Validación de Versión
+    const importVersion = obj.snapshot.version || 1;
+    if (importVersion > DATA_VERSION) {
+        showNotification(`Error de Versión: El archivo (v${importVersion}) es más reciente que el sistema (v${DATA_VERSION}).`);
+        return;
+    }
+
+    // 4. Validación de Estructura
+    if (!validateSnapshotStructure(obj.snapshot)) {
+        showNotification('Estructura de datos interna inválida.');
+        return;
+    }
+
+    // 5. Preparar Backup en Memoria (Estado Actual)
+    const currentSnapshot = getAppSnapshot();
+    const preImportBackup = JSON.stringify(currentSnapshot);
+
+    // 6. Confirmación y Selección de Estrategia
+    showConfirmModal({
+        title: 'Modo de Importación',
+        message: `Archivo verificado (v${importVersion}).\n¿Cómo desea importar los datos?\n\n` +
+                 `• FUSIONAR: Combina datos nuevos con los existentes.\n` +
+                 `• SOBREESCRIBIR: Reemplaza TODO por el archivo.`,
+        confirmText: 'FUSIONAR (Merge)',
+        cancelText: 'Sobreescribir...',
+        onAccept: () => executeImport(obj.snapshot.data, 'merge', preImportBackup),
+        onCancel: () => {
+            // Delay para evitar conflictos de cierre de modal
+            setTimeout(() => {
+                showConfirmModal({
+                    title: '⚠️ Sobreescritura Completa',
+                    message: 'ADVERTENCIA: Se perderán todos los datos actuales que no estén en el archivo.\n¿Está seguro?',
+                    confirmText: 'SÍ, SOBREESCRIBIR',
+                    cancelText: 'Cancelar',
+                    onAccept: () => executeImport(obj.snapshot.data, 'overwrite', preImportBackup),
+                    onCancel: () => showNotification('Importación cancelada.')
+                });
+            }, 400);
+        }
+    });
+}
+
+async function executeImport(data, mode, backupJson) {
+    try {
+        // Guardar backup físico
+        saveVersionedBackup({
+            type: 'vigilancia-backup-pre-import',
+            createdAt: new Date().toISOString(),
+            snapshot: JSON.parse(backupJson),
+            checksum: 'auto-generated'
+        });
+
+        if (mode === 'overwrite') {
+            personal = data.personal || [];
+            turnos = data.turnos || {};
+            if (data.settings) saveSettings(data.settings);
+            localStorage.setItem('vigilancia-annual-logs', JSON.stringify(data.annualLogs || []));
+            localStorage.setItem('vigilancia-movement-logs', JSON.stringify(data.movementLogs || []));
+        } else {
+            // MERGE STRATEGY
+            // 1. Personal: Update/Insert by ID
+            const incomingPersonal = data.personal || [];
+            const personalMap = new Map(personal.map(p => [p.id, p]));
+            incomingPersonal.forEach(p => personalMap.set(p.id, p));
+            personal = Array.from(personalMap.values());
+
+            // 2. Turnos: Merge Object (Incoming wins conflicts)
+            turnos = { ...turnos, ...(data.turnos || {}) };
+
+            // 3. Settings: Merge
+            const currentSettings = getSettings();
+            const newSettings = { ...currentSettings, ...(data.settings || {}) };
+            saveSettings(newSettings);
+
+            // 4. Logs: Combine & Sort
+            const curAL = getAnnualLogs();
+            const newAL = data.annualLogs || [];
+            // Usamos un Map por timestamp+action para dedup básico si fuera necesario, 
+            // pero por simplicidad combinamos y ordenamos.
+            const mergedAL = [...curAL, ...newAL].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            localStorage.setItem('vigilancia-annual-logs', JSON.stringify(mergedAL));
+
+            const curML = getMovementLogs();
+            const newML = data.movementLogs || [];
+            const mergedML = [...curML, ...newML].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            localStorage.setItem('vigilancia-movement-logs', JSON.stringify(mergedML));
+        }
+
+        // Persistir Data Principal
+        saveData();
+
+        // Log del sistema
+        addMovementLog({
+            action: 'import_data',
+            entity: 'system',
+            user: { username: (currentUser && currentUser.username) || 'admin', role: 'admin' },
+            timestamp: new Date().toISOString(),
+            details: { mode: mode, success: true }
+        });
+
+        // Refrescar UI
+        renderPersonalList();
+        populateCompaneroSelect();
+        renderCalendar();
+        loadAnnualLogs();
+        loadMovementLogs();
+
+        showNotification(`Importación (${mode}) completada con éxito.`);
+
+    } catch (err) {
+        console.error('Import Error:', err);
+        showNotification('FALLO CRÍTICO. Ejecutando Rollback automático...');
+        
+        // AUTOMATIC ROLLBACK
+        try {
+            const backup = JSON.parse(backupJson);
+            const d = backup.data;
+            personal = d.personal;
+            turnos = d.turnos;
+            if (d.settings) saveSettings(d.settings);
+            localStorage.setItem('vigilancia-annual-logs', JSON.stringify(d.annualLogs));
+            localStorage.setItem('vigilancia-movement-logs', JSON.stringify(d.movementLogs));
+            saveData();
+            
+            renderPersonalList();
+            renderCalendar();
+            showNotification('Rollback completado. Sistema restaurado.');
+        } catch (rbErr) {
+            console.error('Rollback Failed:', rbErr);
+            alert('ERROR FATAL: El Rollback falló. Los datos pueden estar corruptos.');
+        }
     }
 }
 
@@ -4292,7 +4434,12 @@ function applyTimeInputsFormat() {
             if (!el.dataset.bound24) {
                 el.addEventListener('blur', () => {
                     const v = normalize(el.value);
-                    if (v && pattern.test(v)) el.value = v;
+                    if (v && pattern.test(v)) {
+                        if (el.value !== v) {
+                            el.value = v;
+                            el.dispatchEvent(new Event('change'));
+                        }
+                    }
                 });
                 el.addEventListener('input', () => {
                     const v = el.value.replace(/[^0-9:]/g,'').slice(0,5);
@@ -5279,7 +5426,7 @@ function getCookie(name) {
     return null;
 }
 // Modal de confirmación genérico
-function showConfirmModal({ title, message, onAccept, onCancel }) {
+function showConfirmModal({ title, message, onAccept, onCancel, confirmText, cancelText }) {
     const modal = document.getElementById('confirm-modal');
     const titleEl = document.getElementById('confirm-modal-title');
     const msgEl = document.getElementById('confirm-modal-message');
@@ -5293,6 +5440,13 @@ function showConfirmModal({ title, message, onAccept, onCancel }) {
     }
     if (titleEl) titleEl.textContent = title || 'Confirmación';
     if (msgEl) msgEl.textContent = message || '¿Está seguro?';
+    
+    // Custom button text
+    const originalConfirmText = acceptBtn.textContent;
+    const originalCancelText = cancelBtn.textContent;
+    if (confirmText) acceptBtn.textContent = confirmText;
+    if (cancelText) cancelBtn.textContent = cancelText;
+
     closeHamburgerMenu();
     modal.style.display = 'block';
     lockBodyScroll();
@@ -5304,6 +5458,9 @@ function showConfirmModal({ title, message, onAccept, onCancel }) {
         modal.removeEventListener('keydown', keyHandler);
         if (headerEl) headerEl.classList.remove('accepted');
         if (iconEl) iconEl.classList.remove('accepted');
+        // Restore button text
+        acceptBtn.textContent = originalConfirmText;
+        cancelBtn.textContent = originalCancelText;
         unlockBodyScroll();
     };
     const acceptHandler = () => {
@@ -6658,43 +6815,159 @@ function showReportCompensatoryDetails(personalId, mode, year) {
     if (mode === 'balance') {
         title.textContent = `Detalle Saldo Compensatorio - ${p.apellido}, ${p.nombre}`;
         
-        let history = [];
+        const groups = {};
+        const orphans = [];
         
         Object.keys(turnos).forEach(date => {
              const t = turnos[date][personalId];
              if (t) {
+                 // Generated
                  if (t.tipo === 'guardia_fija' && t.compensatorioGenerado) {
-                     history.push({
+                     if (!groups[date]) groups[date] = { generated: null, taken: [] };
+                     groups[date].generated = {
                          date: date,
-                         type: 'generated',
                          amount: parseFloat(t.compensatorioGenerado)
-                     });
+                     };
                  }
+                 // Taken
                  if (t.tipo === 'compensatorio') {
-                     history.push({
-                         date: date,
-                         type: 'taken',
-                         amount: 1
-                     });
+                     const sourceDate = t.fechaTrabajoRealizado;
+                     if (sourceDate) {
+                         if (!groups[sourceDate]) groups[sourceDate] = { generated: null, taken: [] };
+                         groups[sourceDate].taken.push({
+                             date: date,
+                             amount: 1
+                         });
+                     } else {
+                         orphans.push({
+                             date: date,
+                             amount: 1
+                         });
+                     }
                  }
              }
         });
         
-        history.sort((a, b) => b.date.localeCompare(a.date));
+        const sortedKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+        orphans.sort((a, b) => b.date.localeCompare(a.date));
         
-        if (history.length === 0) {
+        if (sortedKeys.length === 0 && orphans.length === 0) {
             list.innerHTML = '<li>Sin movimientos registrados.</li>';
         } else {
-            history.forEach(h => {
+            // Render Groups
+            sortedKeys.forEach(key => {
+                const g = groups[key];
                 const li = document.createElement('li');
-                const dateFmt = fmt(h.date);
-                if (h.type === 'generated') {
-                    li.textContent = `${dateFmt}: Generado +${h.amount}`;
-                    li.style.color = '#166534'; // Green
+                li.style.marginBottom = '5px';
+                li.style.borderBottom = '1px solid #eee';
+                li.style.paddingBottom = '5px';
+                
+                // Header (Generated)
+                const headerDiv = document.createElement('div');
+                headerDiv.style.display = 'flex';
+                headerDiv.style.alignItems = 'center';
+                headerDiv.style.cursor = 'pointer';
+                headerDiv.style.userSelect = 'none';
+                
+                // Icon
+                const icon = document.createElement('span');
+                icon.innerHTML = '&#9654;'; // Right triangle
+                icon.style.marginRight = '8px';
+                icon.style.fontSize = '0.8em';
+                icon.style.color = '#666';
+                icon.style.display = 'inline-block';
+                icon.style.width = '15px';
+                
+                const text = document.createElement('span');
+                text.style.fontWeight = '500';
+                
+                if (g.generated) {
+                    text.textContent = `${fmt(g.generated.date)}: Generado +${g.generated.amount}`;
+                    text.style.color = '#166534';
                 } else {
-                    li.textContent = `${dateFmt}: Tomado -${h.amount}`;
-                    li.style.color = '#dc3545'; // Red
+                    text.textContent = `${fmt(key)}: (Origen no encontrado)`;
+                    text.style.color = '#666';
                 }
+                
+                headerDiv.appendChild(icon);
+                headerDiv.appendChild(text);
+
+                // Edit/Link Button for Generated
+                if (g.generated) {
+                     const linkBtn = document.createElement('span');
+                     linkBtn.innerHTML = ' 🔗';
+                     linkBtn.title = 'Ir al día';
+                     linkBtn.style.fontSize = '0.9em';
+                     linkBtn.style.marginLeft = '10px';
+                     linkBtn.style.cursor = 'pointer';
+                     linkBtn.onclick = (e) => {
+                         e.stopPropagation();
+                         const detailsModal = document.getElementById('details-modal');
+                         if (detailsModal) detailsModal.style.display = 'none';
+                         if (turnos[g.generated.date] && turnos[g.generated.date][personalId]) {
+                             openTurnoModal(personalId, g.generated.date, turnos[g.generated.date][personalId]);
+                         }
+                     };
+                     headerDiv.appendChild(linkBtn);
+                }
+                
+                // Children Container
+                const childrenUl = document.createElement('ul');
+                childrenUl.style.display = 'none';
+                childrenUl.style.listStyle = 'none';
+                childrenUl.style.paddingLeft = '24px';
+                childrenUl.style.marginTop = '4px';
+                childrenUl.style.fontSize = '0.95em';
+                
+                g.taken.forEach(t => {
+                    const childLi = document.createElement('li');
+                    childLi.style.marginBottom = '2px';
+                    childLi.innerHTML = `<span style="cursor:pointer; text-decoration:underline;">${fmt(t.date)}: Tomado -${t.amount}</span>`;
+                    childLi.style.color = '#dc3545';
+                    childLi.querySelector('span').onclick = () => {
+                         const detailsModal = document.getElementById('details-modal');
+                         if (detailsModal) detailsModal.style.display = 'none';
+                         if (turnos[t.date] && turnos[t.date][personalId]) {
+                             openTurnoModal(personalId, t.date, turnos[t.date][personalId]);
+                         }
+                    };
+                    childrenUl.appendChild(childLi);
+                });
+                
+                // Toggle Logic
+                headerDiv.onclick = () => {
+                    if (childrenUl.style.display === 'none') {
+                        childrenUl.style.display = 'block';
+                        icon.innerHTML = '&#9660;'; // Down triangle
+                    } else {
+                        childrenUl.style.display = 'none';
+                        icon.innerHTML = '&#9654;';
+                    }
+                };
+                
+                li.appendChild(headerDiv);
+                if (g.taken.length > 0) {
+                    li.appendChild(childrenUl);
+                } else {
+                    icon.style.visibility = 'hidden';
+                }
+                
+                list.appendChild(li);
+            });
+            
+            // Orphans
+            orphans.forEach(o => {
+                const li = document.createElement('li');
+                li.style.paddingLeft = '24px';
+                li.innerHTML = `<span style="cursor:pointer; text-decoration:underline;">${fmt(o.date)}: Tomado -${o.amount} (Sin origen)</span>`;
+                li.style.color = '#dc3545';
+                 li.querySelector('span').onclick = () => {
+                     const detailsModal = document.getElementById('details-modal');
+                     if (detailsModal) detailsModal.style.display = 'none';
+                     if (turnos[o.date] && turnos[o.date][personalId]) {
+                         openTurnoModal(personalId, o.date, turnos[o.date][personalId]);
+                     }
+                };
                 list.appendChild(li);
             });
         }
