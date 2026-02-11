@@ -2463,7 +2463,9 @@ function openHelpModal() {
             if (!code && !name) return;
             const row = document.createElement('div');
             row.className = 'help-codes-row';
-            row.innerHTML = `<span class="help-code">${code || '-'}</span><span class="help-name">${name || tipo}</span>`;
+            const codeText = code || '-';
+            const nameText = name || tipo;
+            row.innerHTML = `<span class="help-code" title="${codeText}">${codeText}</span><span class="help-name" title="${nameText}">${nameText}</span>`;
             listEl.appendChild(row);
         });
     }

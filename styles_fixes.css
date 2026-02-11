@@ -727,3 +727,126 @@
     border-radius: 8px;
     border: 1px dashed #cbd5e1;
 }
+
+/* --- Modal de ayuda --- */
+.help-modal-content {
+    max-width: 550px !important;
+    max-height: 85vh;
+    border-radius: 16px !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15) !important;
+    border: none !important;
+    overflow: hidden;
+}
+
+.help-modal-title {
+    margin: 0 !important;
+    padding: 24px 30px !important;
+    font-size: 1.5rem !important;
+    font-weight: 800 !important;
+    color: #1e293b;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.help-modal-body {
+    padding: 24px 30px !important;
+    overflow-y: auto;
+}
+
+.help-section {
+    margin-bottom: 2rem !important;
+}
+
+.help-section:last-child {
+    margin-bottom: 0 !important;
+}
+
+.help-section h3 {
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    color: #334155 !important;
+    margin: 0 0 1rem 0 !important;
+    padding-bottom: 0.5rem !important;
+    border-bottom: 2px solid #3b82f6 !important;
+    display: inline-block;
+}
+
+.help-list {
+    margin: 0 !important;
+    padding: 0 !important;
+    list-style: none !important;
+}
+
+.help-list li {
+    margin-bottom: 0.75rem !important;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.95rem;
+    color: #475569;
+}
+
+.help-list kbd {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 6px !important;
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    border-bottom-width: 3px !important;
+    border-radius: 6px !important;
+    color: #1e293b !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.help-codes-list {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important;
+    gap: 10px !important;
+    background: #f1f5f9;
+    padding: 15px !important;
+    border-radius: 12px;
+}
+
+.help-codes-row {
+    display: flex !important;
+    align-items: center;
+    gap: 10px;
+    background: #ffffff;
+    padding: 8px 12px !important;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s;
+}
+
+.help-codes-row:hover {
+    border-color: #3b82f6;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.help-code {
+    font-family: ui-monospace, SFMono-Regular, monospace !important;
+    font-weight: 800 !important;
+    font-size: 0.85rem !important;
+    color: #2563eb !important;
+    background: #eff6ff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    min-width: 35px;
+    text-align: center;
+}
+
+.help-name {
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+    color: #475569 !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
