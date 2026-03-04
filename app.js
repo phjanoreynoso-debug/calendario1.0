@@ -1,6 +1,20 @@
 // Variables globales
 let personal = [];
 let turnos = {}
+
+async function exportarDatos() {
+    const signedExport = await buildSignedExport();
+    const fileName = `calendario-export-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+    const blob = new Blob([JSON.stringify(signedExport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+    showNotification('Exportación completada.');
+}
 let users = []; // Usuarios adicionales creados por Super Admin
 let currentUser = null; // sesión actual: { username, role }
 let adminIdleTimer = null; // temporizador de inactividad para admin
@@ -41,6 +55,7 @@ let adminActivityHandler = null; // handler para reiniciar temporizador
 function updateCompensatorioOptions() {
     const personalId = document.getElementById('turno-personal-id').value;
     if (!personalId) return;
+    const pidStr = String(personalId);
 
     const select = document.getElementById('fecha-trabajo-realizado');
     const balanceDisplay = document.getElementById('balance-compensatorio-display');
@@ -53,7 +68,7 @@ function updateCompensatorioOptions() {
     // Calculate balance
     let balance = 0;
     if (typeof calculateCompensatoryBalance === 'function') {
-        balance = calculateCompensatoryBalance(personalId);
+        balance = calculateCompensatoryBalance(pidStr);
     }
     
     // Update display with color coding
@@ -76,14 +91,15 @@ function updateCompensatorioOptions() {
     const options = [];
     const takenCounts = {}; // Map: date -> count
     
-    // Get current editing date to exclude it from "taken" count if we are editing an existing record
-    // This allows re-selecting the same source date when editing
+    // Get current editing date and person to find existing link
     const currentTurnDate = document.getElementById('turno-fecha') ? document.getElementById('turno-fecha').value : null;
+    const currentTurn = (turnos && currentTurnDate && turnos[currentTurnDate]) ? turnos[currentTurnDate][pidStr] : null;
+    const existingOrigin = currentTurn ? currentTurn.fechaTrabajoRealizado : null;
 
     if (turnos) {
         Object.keys(turnos).forEach(date => {
             if (turnos[date]) {
-                const t = turnos[date][personalId];
+                const t = turnos[date][pidStr];
                 if (t) {
                     // Collect taken dates (count usage)
                     // If we are editing the current turn (date === currentTurnDate), ignore its usage
@@ -94,24 +110,35 @@ function updateCompensatorioOptions() {
                              takenCounts[t.fechaTrabajoRealizado] = (takenCounts[t.fechaTrabajoRealizado] || 0) + 1;
                          }
                     }
-                    // Collect generated dates
-                    if (t.tipo === 'guardia_fija' && t.compensatorioGenerado && parseFloat(t.compensatorioGenerado) > 0) {
-                        options.push({
-                            date: date,
-                            amount: parseFloat(t.compensatorioGenerado)
-                        });
-                    }
+                // Collect generated dates
+                if (t.compensatorioGenerado && parseFloat(t.compensatorioGenerado) > 0) {
+                    options.push({
+                        date: date,
+                        amount: parseFloat(t.compensatorioGenerado)
+                    });
+                }
                 }
             }
         });
     }
     
+    // If the existing origin is not in the list of generated dates (e.g. it was deleted or is from metadata),
+    // we MUST add it to the options so the dropdown can show it.
+    if (existingOrigin && !options.find(o => o.date === existingOrigin)) {
+        options.push({
+            date: existingOrigin,
+            amount: currentTurn.sourceAmount || 1, // Use metadata if available
+            isMissing: true
+        });
+    }
+
     // Sort by date descending (newest first)
     options.sort((a, b) => b.date.localeCompare(a.date));
     
     // Filter out fully used dates
-    // Available if generated amount > taken count
+    // ALWAYS keep the existing origin regardless of usage
     const availableOptions = options.filter(opt => {
+        if (opt.date === existingOrigin) return true;
         const taken = takenCounts[opt.date] || 0;
         return opt.amount > taken;
     });
@@ -127,9 +154,15 @@ function updateCompensatorioOptions() {
             option.value = opt.date;
             const parts = opt.date.split('-');
             const dateFmt = `${parts[2]}/${parts[1]}/${parts[0]}`;
-            option.textContent = `${dateFmt} (+${opt.amount})`;
+            const missingLabel = opt.isMissing ? ' (Origen no encontrado)' : '';
+            option.textContent = `${dateFmt} (+${opt.amount})${missingLabel}`;
             select.appendChild(option);
         });
+    }
+    
+    // Re-set value if it was already selected
+    if (existingOrigin) {
+        select.value = existingOrigin;
     }
 }
 
@@ -156,7 +189,7 @@ function handleTipoTurnoChange() {
     
     switch(tipoTurno) {
         case 'guardia_fija':
-            const extras = document.getElementById('campos-guardia-extras');
+            const extras = document.getElementById('campos-guardia-compensatorio');
             if (extras) extras.style.display = 'block';
             break;
         case 'vacaciones':
@@ -174,7 +207,7 @@ function handleTipoTurnoChange() {
             break;
         case 'cambios_guardia':
             document.getElementById('campos-cambios-guardia').style.display = 'block';
-            const extrasCG = document.getElementById('campos-guardia-extras');
+            const extrasCG = document.getElementById('campos-guardia-compensatorio');
             if (extrasCG) extrasCG.style.display = 'block';
             break;
         case 'articulo26':
@@ -187,6 +220,15 @@ function handleTipoTurnoChange() {
                 updateVacacionesDiasContador();
             }
         }
+}
+
+// Función para manejar el checkbox de generación de compensatorio
+function updateCompensatoryCheckboxState() {
+    const checkbox = document.getElementById('genera-compensatorio');
+    const container = document.getElementById('cantidad-compensatorio-container');
+    if (checkbox && container) {
+        container.style.display = checkbox.checked ? 'block' : 'none';
+    }
 }
 
 // Contador de días seleccionados para Vacaciones/Estrés
@@ -410,9 +452,39 @@ function validateArticulo26(fecha, personalId) {
 function loadConditionalFieldsData(turno) {
     switch(turno.tipo) {
         case 'guardia_fija':
-            if (turno.compensatorioGenerado) document.getElementById('compensatorio-generado').value = turno.compensatorioGenerado;
-            if (turno.horasExtras) document.getElementById('horas-extras').value = turno.horasExtras;
+        case 'cambios_guardia': {
+            const checkbox = document.getElementById('genera-compensatorio');
+            const input = document.getElementById('cantidad-dias-compensatorio');
+            const extrasInput = document.getElementById('horas-extras-legacy');
+            
+            if (turno.compensatorioGenerado) {
+                if (checkbox) checkbox.checked = true;
+                if (input) input.value = turno.compensatorioGenerado;
+            } else {
+                if (checkbox) checkbox.checked = false;
+                if (input) input.value = 1;
+            }
+            if (turno.horasExtras && extrasInput) extrasInput.value = turno.horasExtras;
+            updateCompensatoryCheckboxState();
+            
+            if (turno.tipo === 'cambios_guardia') {
+                const select = document.getElementById('companero-cambio');
+                if (turno.companeroCambio && select) {
+                    const hasId = personal.some(p => p.id === turno.companeroCambio);
+                    if (hasId) {
+                        select.value = turno.companeroCambio;
+                    } else {
+                        const opt = Array.from(select.options).find(o => o.textContent === turno.companeroCambio);
+                        if (opt) select.value = opt.value;
+                    }
+                }
+                const fechaDevolucionInput = document.getElementById('fecha-devolucion');
+                if (fechaDevolucionInput && turno.fechaDevolucion) {
+                    fechaDevolucionInput.value = turno.fechaDevolucion;
+                }
+            }
             break;
+        }
         case 'vacaciones':
         case 'estres':
             if (turno.fechaInicio) document.getElementById('fecha-inicio').value = turno.fechaInicio;
@@ -426,34 +498,30 @@ function loadConditionalFieldsData(turno) {
             break;
         case 'compensatorio':
             if (turno.fechaTrabajoRealizado) document.getElementById('fecha-trabajo-realizado').value = turno.fechaTrabajoRealizado;
-            break;
-        case 'cambios_guardia': {
-            const select = document.getElementById('companero-cambio');
-            if (turno.companeroCambio && select) {
-                const hasId = personal.some(p => p.id === turno.companeroCambio);
-                if (hasId) {
-                    select.value = turno.companeroCambio;
-                } else {
-                    const opt = Array.from(select.options).find(o => o.textContent === turno.companeroCambio);
-                    if (opt) select.value = opt.value;
-                }
+            if (turno.isAdjustment) {
+                // Si es un ajuste, mostrar campos de generación de compensatorio
+                const extrasGroup = document.getElementById('campos-guardia-compensatorio');
+                if (extrasGroup) extrasGroup.style.display = 'block';
+                const checkbox = document.getElementById('genera-compensatorio');
+                const input = document.getElementById('cantidad-dias-compensatorio');
+                if (checkbox) checkbox.checked = !!turno.compensatorioGenerado;
+                if (input && turno.compensatorioGenerado) input.value = turno.compensatorioGenerado;
+                updateCompensatoryCheckboxState();
             }
-            const fechaDevolucionInput = document.getElementById('fecha-devolucion');
-            if (fechaDevolucionInput && turno.fechaDevolucion) {
-                fechaDevolucionInput.value = turno.fechaDevolucion;
-            }
-            if (turno.compensatorioGenerado) document.getElementById('compensatorio-generado').value = turno.compensatorioGenerado;
-            if (turno.horasExtras) document.getElementById('horas-extras').value = turno.horasExtras;
             break;
-        }
     }
 }
 
 // Función para limpiar campos condicionales
 function clearConditionalFields() {
     // Limpiar campos extras
-    document.getElementById('compensatorio-generado').value = '';
-    document.getElementById('horas-extras').value = '';
+    const checkbox = document.getElementById('genera-compensatorio');
+    if (checkbox) checkbox.checked = false;
+    const input = document.getElementById('cantidad-dias-compensatorio');
+    if (input) input.value = 1;
+    const extrasInput = document.getElementById('horas-extras-legacy');
+    if (extrasInput) extrasInput.value = '';
+    updateCompensatoryCheckboxState();
 
     // Limpiar campos de vacaciones/estrés
     document.getElementById('fecha-inicio').value = '';
@@ -562,6 +630,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Ejecutar cada 5 segundos para actualización "instantánea" (solo chequea el día de hoy)
     setInterval(() => autoMarkScheduledShifts(false), 5000);
     updateSessionUI();
+
+    const exportDataBtn = document.getElementById('export-data-btn');
+    if (exportDataBtn) {
+        exportDataBtn.style.display = 'block';
+        exportDataBtn.addEventListener('click', exportarDatos);
+    }
+
     setupEventListeners();
     // Mostrar mensajes de cierre previo si aplica
     try {
@@ -687,6 +762,10 @@ function setupEventListeners() {
     
     // Evento para cambio de tipo de turno (campos condicionales)
     document.getElementById('turno-tipo').addEventListener('change', handleTipoTurnoChange);
+    const generaCompensatorio = document.getElementById('genera-compensatorio');
+    if (generaCompensatorio) {
+        generaCompensatorio.addEventListener('change', updateCompensatoryCheckboxState);
+    }
     // Refrescar contador Artículo 26 al cambiar persona o fecha
     const personalSelect = document.getElementById('turno-personal-id');
     const fechaInput = document.getElementById('turno-fecha');
@@ -3335,12 +3414,18 @@ function handleTurnoSubmit(e) {
     const conditionalData = {};
     
     switch(tipo) {
-        case 'guardia_fija':
-             const compGen = document.getElementById('compensatorio-generado').value;
-             const hExt = document.getElementById('horas-extras').value;
-             if (compGen) conditionalData.compensatorioGenerado = compGen;
-             if (hExt) conditionalData.horasExtras = hExt;
+        case 'guardia_fija': {
+             const checkbox = document.getElementById('genera-compensatorio');
+             const input = document.getElementById('cantidad-dias-compensatorio');
+             const extrasInput = document.getElementById('horas-extras-legacy');
+             if (checkbox && checkbox.checked && input) {
+                 conditionalData.compensatorioGenerado = input.value;
+             }
+             if (extrasInput && extrasInput.value) {
+                 conditionalData.horasExtras = extrasInput.value;
+             }
              break;
+        }
         case 'vacaciones':
         case 'estres': {
             conditionalData.fechaInicio = document.getElementById('fecha-inicio').value;
@@ -3379,21 +3464,60 @@ function handleTurnoSubmit(e) {
             break;
         }
         case 'compensatorio': {
-            conditionalData.fechaTrabajoRealizado = document.getElementById('fecha-trabajo-realizado').value;
+            const sourceDate = document.getElementById('fecha-trabajo-realizado').value;
+            
+            // Si es un ajuste manual (previo o actual), permitimos que no tenga origen y guardamos sus campos
+            if (prevTurno && prevTurno.isAdjustment) {
+                conditionalData.isAdjustment = true;
+                const checkbox = document.getElementById('genera-compensatorio');
+                const input = document.getElementById('cantidad-dias-compensatorio');
+                if (checkbox && checkbox.checked && input) {
+                    conditionalData.compensatorioGenerado = input.value;
+                }
+                // Si el usuario eligió un origen en el modal regular, lo guardamos también
+                if (sourceDate) {
+                    conditionalData.fechaTrabajoRealizado = sourceDate;
+                    const sTurn = (turnos[sourceDate] && turnos[sourceDate][personalId]) ? turnos[sourceDate][personalId] : null;
+                    if (sTurn) {
+                        conditionalData.sourceAmount = parseFloat(sTurn.compensatorioGenerado) || 1;
+                        conditionalData.sourceType = sTurn.tipo;
+                    }
+                }
+                break;
+            }
+
+            conditionalData.fechaTrabajoRealizado = sourceDate;
             if (!conditionalData.fechaTrabajoRealizado) {
                 showNotification('Indique la fecha del día realizado para el compensatorio.');
                 isSubmitting = false;
                 return;
             }
+            // Guardar metadata del origen para que sea persistente incluso si el origen desaparece (ej. exportación parcial)
+            const sTurn = (turnos[sourceDate] && turnos[sourceDate][personalId]) ? turnos[sourceDate][personalId] : null;
+            if (sTurn) {
+                conditionalData.sourceAmount = parseFloat(sTurn.compensatorioGenerado) || 1;
+                conditionalData.sourceType = sTurn.tipo;
+            } else if (prevTurno && prevTurno.fechaTrabajoRealizado === sourceDate) {
+                // Si el origen no está en los turnos pero es el mismo que ya tenía el turno, preservar su metadata
+                if (prevTurno.sourceAmount) conditionalData.sourceAmount = prevTurno.sourceAmount;
+                if (prevTurno.sourceType) conditionalData.sourceType = prevTurno.sourceType;
+            }
             break;
         }
-        case 'cambios_guardia':
+        case 'cambios_guardia': {
             conditionalData.companeroCambio = document.getElementById('companero-cambio').value;
             conditionalData.fechaDevolucion = document.getElementById('fecha-devolucion') ? document.getElementById('fecha-devolucion').value : '';
-            const compGenCG = document.getElementById('compensatorio-generado').value;
-            const hExtCG = document.getElementById('horas-extras').value;
-            if (compGenCG) conditionalData.compensatorioGenerado = compGenCG;
-            if (hExtCG) conditionalData.horasExtras = hExtCG;
+            
+            const checkbox = document.getElementById('genera-compensatorio');
+            const input = document.getElementById('cantidad-dias-compensatorio');
+            const extrasInput = document.getElementById('horas-extras-legacy');
+            
+            if (checkbox && checkbox.checked && input) {
+                conditionalData.compensatorioGenerado = input.value;
+            }
+            if (extrasInput && extrasInput.value) {
+                conditionalData.horasExtras = extrasInput.value;
+            }
 
             if (!conditionalData.companeroCambio) {
                 showNotification('Seleccione el compañero para el cambio.');
@@ -3406,6 +3530,7 @@ function handleTurnoSubmit(e) {
                 return;
             }
             break;
+        }
         default: {
             const cfg = getCustomTypeConfig(tipo);
             if (cfg && cfg.requireDateRange) {
@@ -4096,8 +4221,16 @@ async function executeImport(data, mode, backupJson) {
             incomingPersonal.forEach(p => personalMap.set(p.id, p));
             personal = Array.from(personalMap.values());
 
-            // 2. Turnos: Merge Object (Incoming wins conflicts)
-            turnos = { ...turnos, ...(data.turnos || {}) };
+            // 2. Turnos: Merge Deep (Nested person objects)
+            const incomingTurnos = data.turnos || {};
+            Object.keys(incomingTurnos).forEach(date => {
+                if (!turnos[date]) {
+                    turnos[date] = incomingTurnos[date];
+                } else {
+                    // Merge persons for this date
+                    turnos[date] = { ...turnos[date], ...incomingTurnos[date] };
+                }
+            });
 
             // 3. Settings: Merge
             const currentSettings = getSettings();
@@ -6776,26 +6909,48 @@ function showReportAnomalyDetails(personalId, year) {
 function calculateCompensatoryBalance(personalId) {
      let generated = 0;
      let taken = 0;
+     const pidStr = String(personalId);
+     const explicitGens = {}; // date -> amount
+     const missingGenUses = {}; // date -> totalTaken
+     const useMetadata = {}; // date -> sourceAmount (from any use)
      
      if (!turnos) return 0;
      
      Object.keys(turnos).forEach(date => {
         if (turnos[date]) {
-             const t = turnos[date][personalId];
+             const t = turnos[date][pidStr];
              if (t) {
-                 if (t.tipo === 'guardia_fija' && t.compensatorioGenerado) {
-                     generated += parseFloat(t.compensatorioGenerado) || 0;
-                 }
                  if (t.tipo === 'compensatorio') {
                      taken += 1;
+                     const src = t.fechaTrabajoRealizado;
+                     if (src) {
+                         missingGenUses[src] = (missingGenUses[src] || 0) + 1;
+                         if (t.sourceAmount) useMetadata[src] = parseFloat(t.sourceAmount);
+                     }
+                 }
+                 if (t.compensatorioGenerado) {
+                     explicitGens[date] = parseFloat(t.compensatorioGenerado) || 0;
                  }
              }
          }
      });
+
+     // Total Generated = Sum of all explicit
+     generated = Object.values(explicitGens).reduce((a, b) => a + b, 0);
+     
+     // Recover generations from missing origins
+     Object.keys(missingGenUses).forEach(src => {
+         if (explicitGens[src] === undefined) {
+             // Origin is missing. Recover from metadata OR assume minimum to cover uses
+             const recovered = useMetadata[src] || missingGenUses[src];
+             generated += recovered;
+         }
+     });
+
      return generated - taken;
 }
 
-function showReportCompensatoryDetails(personalId, mode, year) {
+function showReportCompensatoryDetails(personalId, mode, year, statusFilter = 'pending') {
     const p = personal.find(x => x.id === personalId);
     if (!p) return;
 
@@ -6816,27 +6971,157 @@ function showReportCompensatoryDetails(personalId, mode, year) {
     };
 
     if (mode === 'balance') {
-        title.textContent = `Detalle Saldo Compensatorio - ${p.apellido}, ${p.nombre}`;
+        title.textContent = `Detalle Compensatorio - ${p.apellido}, ${p.nombre}`;
         
+        // Toolbar: Stats and Add Button
+        const statsContainer = document.getElementById('comp-summary-stats');
+        const openFormBtn = document.getElementById('open-manual-form-btn');
+        const pendingTab = document.getElementById('filter-pending');
+        const completedTab = document.getElementById('filter-completed');
+        
+        // Update Tabs UI
+        if (pendingTab && completedTab) {
+            const isActive = (tab, active) => {
+                tab.style.backgroundColor = active ? '#fff' : 'transparent';
+                tab.style.color = active ? '#0f172a' : '#64748b';
+                tab.style.boxShadow = active ? '0 1px 3px rgba(0,0,0,0.1)' : 'none';
+            };
+            isActive(pendingTab, statusFilter === 'pending');
+            isActive(completedTab, statusFilter === 'completed');
+            
+            pendingTab.onclick = () => showReportCompensatoryDetails(personalId, mode, year, 'pending');
+            completedTab.onclick = () => showReportCompensatoryDetails(personalId, mode, year, 'completed');
+        }
+
+        if (statsContainer) {
+            statsContainer.innerHTML = '';
+            const balance = calculateCompensatoryBalance(personalId);
+            
+            const createStat = (label, value, color) => {
+                const div = document.createElement('div');
+                div.style.padding = '5px 12px';
+                div.style.borderRadius = '20px';
+                div.style.fontSize = '0.9em';
+                div.style.fontWeight = '600';
+                div.style.backgroundColor = color + '20';
+                div.style.color = color;
+                div.style.border = `1px solid ${color}40`;
+                div.innerHTML = `${label}: <span style="font-size: 1.1em;">${value}</span>`;
+                return div;
+            };
+            
+            statsContainer.appendChild(createStat('Días Disponibles', balance, balance >= 0 ? '#16a34a' : '#dc2626'));
+        }
+
+        if (openFormBtn) {
+            openFormBtn.onclick = () => {
+                const form = document.getElementById('manual-compensatory-form');
+                if (form) {
+                    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+                    if (form.style.display === 'block') {
+                        const dateInput = document.getElementById('manual-comp-fecha');
+                        if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+                        
+                        // Clear previous manual form values
+                        document.getElementById('manual-comp-cantidad').value = 1;
+                        document.getElementById('manual-comp-horas').value = '';
+                        document.getElementById('manual-comp-obs').value = '';
+                    }
+                }
+            };
+        }
+
+        const saveBtn = document.getElementById('save-manual-comp-btn');
+        if (saveBtn) {
+            saveBtn.onclick = () => {
+                const date = document.getElementById('manual-comp-fecha').value;
+                const amount = document.getElementById('manual-comp-cantidad').value;
+                const horas = document.getElementById('manual-comp-horas').value;
+                const obs = document.getElementById('manual-comp-obs').value;
+                
+                if (!date || !amount) {
+                    showNotification('Indique fecha y cantidad.', 'error');
+                    return;
+                }
+                
+                if (!turnos[date]) turnos[date] = {};
+                turnos[date][personalId] = {
+                    tipo: 'compensatorio',
+                    compensatorioGenerado: amount,
+                    horasRealizadas: horas,
+                    fechaTrabajoRealizado: date, // <--- Group with self
+                    isAdjustment: true,
+                    observaciones: obs
+                };
+                
+                saveData();
+                showNotification('Ajuste compensatorio guardado correctamente.');
+                document.getElementById('manual-compensatory-form').style.display = 'none';
+                
+                showReportCompensatoryDetails(personalId, mode, year, statusFilter);
+                renderCalendar();
+            };
+        }
+
         const groups = {};
         const orphans = [];
+        const takenBySource = {};
         
         Object.keys(turnos).forEach(date => {
              const t = turnos[date][personalId];
              if (t) {
-                 // Generated
-                 if (t.tipo === 'guardia_fija' && t.compensatorioGenerado) {
+                 if (t.tipo === 'compensatorio') {
+                     const src = t.fechaTrabajoRealizado || (t.isAdjustment ? date : null);
+                     if (src) {
+                         takenBySource[src] = (takenBySource[src] || 0) + 1;
+                     }
+                 }
+             }
+        });
+
+        Object.keys(turnos).forEach(date => {
+             const t = turnos[date][personalId];
+             if (t) {
+                 // Generated: se permite compensatorioGenerado en cualquier tipo (ej. guardia_fija, cambios_guardia)
+                 if (t.compensatorioGenerado) {
                      if (!groups[date]) groups[date] = { generated: null, taken: [] };
                      groups[date].generated = {
                          date: date,
-                         amount: parseFloat(t.compensatorioGenerado)
+                         amount: parseFloat(t.compensatorioGenerado),
+                         horas: t.horasRealizadas || null,
+                         isAdjustment: !!t.isAdjustment
                      };
                  }
                  // Taken
                  if (t.tipo === 'compensatorio') {
-                     const sourceDate = t.fechaTrabajoRealizado;
+                     let sourceDate = t.fechaTrabajoRealizado;
+                     
+                     // Si es un ajuste manual y no tiene origen, el origen es él mismo
+                     if (!sourceDate && t.isAdjustment) {
+                         sourceDate = date;
+                     }
+
                      if (sourceDate) {
                          if (!groups[sourceDate]) groups[sourceDate] = { generated: null, taken: [] };
+                         
+                         // Si el origen no existe en los turnos actuales, usar metadata del turno compensatorio (fallback)
+                         if (!groups[sourceDate].generated && t.sourceAmount) {
+                             groups[sourceDate].generated = {
+                                 date: sourceDate,
+                                 amount: parseFloat(t.sourceAmount),
+                                 isLegacy: true
+                             };
+                         } else if (!groups[sourceDate].generated) {
+                             // Fallback total para registros muy antiguos sin metadata
+                             const totalTaken = takenBySource[sourceDate] || 0;
+                             groups[sourceDate].generated = {
+                                 date: sourceDate,
+                                 amount: totalTaken,
+                                 isLegacy: true,
+                                 isEstimated: true
+                             };
+                         }
+
                          groups[sourceDate].taken.push({
                              date: date,
                              amount: 1
@@ -6851,19 +7136,40 @@ function showReportCompensatoryDetails(personalId, mode, year) {
              }
         });
         
-        const sortedKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+        // Filter based on statusFilter
+        const allKeys = Object.keys(groups);
+        const filteredKeys = allKeys.filter(key => {
+            const g = groups[key];
+            const totalTaken = g.taken.reduce((sum, item) => sum + item.amount, 0);
+            const generatedAmount = g.generated ? g.generated.amount : 0;
+            const isCompleted = totalTaken >= generatedAmount;
+            return statusFilter === 'completed' ? isCompleted : !isCompleted;
+        });
+
+        const sortedKeys = filteredKeys.sort((a, b) => b.localeCompare(a));
         orphans.sort((a, b) => b.date.localeCompare(a.date));
         
-        if (sortedKeys.length === 0 && orphans.length === 0) {
-            list.innerHTML = '<li>Sin movimientos registrados.</li>';
+        // Show orphans only in pending tab
+        const visibleOrphans = statusFilter === 'pending' ? orphans : [];
+
+        if (sortedKeys.length === 0 && visibleOrphans.length === 0) {
+            const noMovementsLi = document.createElement('li');
+            noMovementsLi.textContent = statusFilter === 'pending' ? 'Sin compensatorios pendientes.' : 'Sin compensatorios completados.';
+            noMovementsLi.style.padding = '20px';
+            noMovementsLi.style.textAlign = 'center';
+            noMovementsLi.style.color = '#64748b';
+            noMovementsLi.style.fontSize = '0.95em';
+            list.appendChild(noMovementsLi);
         } else {
             // Render Groups
             sortedKeys.forEach(key => {
                 const g = groups[key];
                 const li = document.createElement('li');
-                li.style.marginBottom = '5px';
-                li.style.borderBottom = '1px solid #eee';
-                li.style.paddingBottom = '5px';
+                li.style.marginBottom = '12px';
+                li.style.padding = '12px';
+                li.style.borderRadius = '8px';
+                li.style.backgroundColor = '#f8fafc';
+                li.style.border = '1px solid #e2e8f0';
                 
                 // Header (Generated)
                 const headerDiv = document.createElement('div');
@@ -6872,64 +7178,130 @@ function showReportCompensatoryDetails(personalId, mode, year) {
                 headerDiv.style.cursor = 'pointer';
                 headerDiv.style.userSelect = 'none';
                 
-                // Icon
+                // Icon for expanding
                 const icon = document.createElement('span');
-                icon.innerHTML = '&#9654;'; // Right triangle
-                icon.style.marginRight = '8px';
-                icon.style.fontSize = '0.8em';
-                icon.style.color = '#666';
-                icon.style.display = 'inline-block';
-                icon.style.width = '15px';
+                icon.innerHTML = '<i class="fas fa-chevron-right"></i>';
+                icon.style.marginRight = '12px';
+                icon.style.fontSize = '0.85em';
+                icon.style.color = '#64748b';
+                icon.style.transition = 'transform 0.2s';
                 
                 const text = document.createElement('span');
-                text.style.fontWeight = '500';
+                text.style.fontWeight = '600';
+                text.style.fontSize = '0.95em';
+                text.style.flex = '1';
                 
                 if (g.generated) {
-                    text.textContent = `${fmt(g.generated.date)}: Generado +${g.generated.amount}`;
-                    text.style.color = '#166534';
+                    let label = g.generated.isAdjustment ? 'Ajuste Manual' : 'Generado';
+                    const legacyLabel = g.generated.isLegacy ? (g.generated.isEstimated ? ' (Estimado)' : ' (Histórico)') : '';
+                    const horasLabel = g.generated.horas ? ` <span style="color: #64748b; font-weight: normal; font-size: 0.9em;">(${g.generated.horas} hs)</span>` : '';
+                    text.innerHTML = `<span style="color: #16a34a;">${fmt(g.generated.date)}</span>: ${label} <span style="color: #16a34a;">+${g.generated.amount}</span>${horasLabel}${legacyLabel}`;
                 } else {
-                    text.textContent = `${fmt(key)}: (Origen no encontrado)`;
-                    text.style.color = '#666';
+                    const totalTaken = g.taken.reduce((sum, item) => sum + item.amount, 0);
+                    text.innerHTML = `<span style="color: #d97706;">${fmt(key)}</span>: Origen no encontrado <span style="color: #d97706;">(Mínimo +${totalTaken})</span>`;
                 }
                 
                 headerDiv.appendChild(icon);
                 headerDiv.appendChild(text);
 
-                // Edit/Link Button for Generated
+                // Edit/Link Button for Origin
+                const linkBtn = document.createElement('button');
+                linkBtn.innerHTML = '<i class="fas fa-external-link-alt"></i>';
+                linkBtn.title = 'Ir al día de origen';
+                linkBtn.style.border = 'none';
+                linkBtn.style.background = 'none';
+                linkBtn.style.color = '#3b82f6';
+                linkBtn.style.cursor = 'pointer';
+                linkBtn.style.padding = '4px 8px';
+                linkBtn.style.borderRadius = '4px';
+                linkBtn.onmouseover = () => linkBtn.style.backgroundColor = '#dbeafe';
+                linkBtn.onmouseout = () => linkBtn.style.backgroundColor = 'transparent';
+                linkBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    modal.style.display = 'none';
+                    const targetDate = g.generated ? g.generated.date : key;
+                    const existingTurno = (turnos[targetDate] && turnos[targetDate][personalId]) ? turnos[targetDate][personalId] : null;
+                    openTurnoModal(personalId, targetDate, existingTurno);
+                };
+                headerDiv.appendChild(linkBtn);
+
+                // Delete Button for Origin
                 if (g.generated) {
-                     const linkBtn = document.createElement('span');
-                     linkBtn.innerHTML = ' 🔗';
-                     linkBtn.title = 'Ir al día';
-                     linkBtn.style.fontSize = '0.9em';
-                     linkBtn.style.marginLeft = '10px';
-                     linkBtn.style.cursor = 'pointer';
-                     linkBtn.onclick = (e) => {
-                         e.stopPropagation();
-                         const detailsModal = document.getElementById('details-modal');
-                         if (detailsModal) detailsModal.style.display = 'none';
-                         if (turnos[g.generated.date] && turnos[g.generated.date][personalId]) {
-                             openTurnoModal(personalId, g.generated.date, turnos[g.generated.date][personalId]);
-                         }
-                     };
-                     headerDiv.appendChild(linkBtn);
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                    deleteBtn.title = g.generated.isLegacy ? 'Desvincular compensatorios de este origen' : 'Eliminar generación de compensatorio';
+                    deleteBtn.style.border = 'none';
+                    deleteBtn.style.background = 'none';
+                    deleteBtn.style.color = '#dc2626';
+                    deleteBtn.style.cursor = 'pointer';
+                    deleteBtn.style.padding = '4px 8px';
+                    deleteBtn.style.borderRadius = '4px';
+                    deleteBtn.style.marginLeft = '4px';
+                    deleteBtn.onmouseover = () => deleteBtn.style.backgroundColor = '#fee2e2';
+                    deleteBtn.onmouseout = () => deleteBtn.style.backgroundColor = 'transparent';
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        const targetDate = g.generated.date;
+                        const msg = g.generated.isLegacy 
+                            ? `Este origen es histórico/estimado. ¿Desea desvincular los ${g.taken.length} compensatorios tomados de la fecha ${fmt(targetDate)}? (Pasarán a figurar como "Sin origen")`
+                            : `¿Está seguro de eliminar la generación de compensatorio del día ${fmt(targetDate)}?`;
+
+                        if (confirm(msg)) {
+                            if (g.generated.isLegacy) {
+                                // Desvincular todos los que usan este origen
+                                Object.keys(turnos).forEach(d => {
+                                    if (turnos[d][personalId] && turnos[d][personalId].fechaTrabajoRealizado === targetDate) {
+                                        delete turnos[d][personalId].fechaTrabajoRealizado;
+                                        delete turnos[d][personalId].sourceAmount;
+                                        delete turnos[d][personalId].sourceType;
+                                    }
+                                });
+                                showNotification('Compensatorios desvinculados.');
+                            } else {
+                                // Eliminar la generación del turno real
+                                if (turnos[targetDate] && turnos[targetDate][personalId]) {
+                                    const t = turnos[targetDate][personalId];
+                                    delete t.compensatorioGenerado;
+                                    delete t.horasRealizadas;
+                                    delete t.isAdjustment;
+                                    if (t.tipo === 'compensatorio' && !t.fechaTrabajoRealizado) {
+                                        delete turnos[targetDate][personalId];
+                                    }
+                                    showNotification('Generación eliminada correctamente.');
+                                }
+                            }
+                            saveData();
+                            showReportCompensatoryDetails(personalId, mode, year, statusFilter);
+                            renderCalendar();
+                        }
+                    };
+                    headerDiv.appendChild(deleteBtn);
                 }
                 
-                // Children Container
+                // Children Container (Taken items)
                 const childrenUl = document.createElement('ul');
                 childrenUl.style.display = 'none';
                 childrenUl.style.listStyle = 'none';
-                childrenUl.style.paddingLeft = '24px';
-                childrenUl.style.marginTop = '4px';
-                childrenUl.style.fontSize = '0.95em';
+                childrenUl.style.paddingLeft = '28px';
+                childrenUl.style.marginTop = '10px';
+                childrenUl.style.borderLeft = '2px solid #e2e8f0';
                 
                 g.taken.forEach(t => {
                     const childLi = document.createElement('li');
-                    childLi.style.marginBottom = '2px';
-                    childLi.innerHTML = `<span style="cursor:pointer; text-decoration:underline;">${fmt(t.date)}: Tomado -${t.amount}</span>`;
-                    childLi.style.color = '#dc3545';
-                    childLi.querySelector('span').onclick = () => {
-                         const detailsModal = document.getElementById('details-modal');
-                         if (detailsModal) detailsModal.style.display = 'none';
+                    childLi.style.marginBottom = '6px';
+                    childLi.style.fontSize = '0.9em';
+                    childLi.style.display = 'flex';
+                    childLi.style.alignItems = 'center';
+                    childLi.style.gap = '8px';
+                    childLi.innerHTML = `
+                        <i class="fas fa-arrow-right" style="color: #94a3b8; font-size: 0.8em;"></i>
+                        <span style="color: #dc2626; font-weight: 500;">${fmt(t.date)}</span>
+                        <span style="color: #dc2626;">Tomado -${t.amount}</span>
+                        <i class="fas fa-external-link-alt" style="color: #3b82f6; font-size: 0.8em; cursor: pointer;" title="Ir al día"></i>
+                    `;
+                    childLi.style.cursor = 'pointer';
+                    childLi.onclick = () => {
+                         modal.style.display = 'none';
                          if (turnos[t.date] && turnos[t.date][personalId]) {
                              openTurnoModal(personalId, t.date, turnos[t.date][personalId]);
                          }
@@ -6941,10 +7313,10 @@ function showReportCompensatoryDetails(personalId, mode, year) {
                 headerDiv.onclick = () => {
                     if (childrenUl.style.display === 'none') {
                         childrenUl.style.display = 'block';
-                        icon.innerHTML = '&#9660;'; // Down triangle
+                        icon.style.transform = 'rotate(90deg)';
                     } else {
                         childrenUl.style.display = 'none';
-                        icon.innerHTML = '&#9654;';
+                        icon.style.transform = 'rotate(0deg)';
                     }
                 };
                 
@@ -6959,14 +7331,29 @@ function showReportCompensatoryDetails(personalId, mode, year) {
             });
             
             // Orphans
-            orphans.forEach(o => {
+            visibleOrphans.forEach(o => {
                 const li = document.createElement('li');
-                li.style.paddingLeft = '24px';
-                li.innerHTML = `<span style="cursor:pointer; text-decoration:underline;">${fmt(o.date)}: Tomado -${o.amount} (Sin origen)</span>`;
-                li.style.color = '#dc3545';
-                 li.querySelector('span').onclick = () => {
-                     const detailsModal = document.getElementById('details-modal');
-                     if (detailsModal) detailsModal.style.display = 'none';
+                li.style.marginBottom = '12px';
+                li.style.padding = '12px';
+                li.style.borderRadius = '8px';
+                li.style.backgroundColor = '#fff1f2';
+                li.style.border = '1px solid #fecaca';
+                li.style.fontSize = '0.95em';
+                li.style.display = 'flex';
+                li.style.alignItems = 'center';
+                li.style.gap = '10px';
+                
+                li.innerHTML = `
+                    <i class="fas fa-exclamation-circle" style="color: #dc2626;"></i>
+                    <span style="flex: 1;">
+                        <span style="font-weight: 600; color: #dc2626;">${fmt(o.date)}</span>: 
+                        Tomado -${o.amount} <span style="color: #991b1b; font-size: 0.9em;">(Sin origen vinculado)</span>
+                    </span>
+                    <i class="fas fa-external-link-alt" style="color: #3b82f6; cursor: pointer;" title="Ir al día"></i>
+                `;
+                li.style.cursor = 'pointer';
+                li.onclick = () => {
+                     modal.style.display = 'none';
                      if (turnos[o.date] && turnos[o.date][personalId]) {
                          openTurnoModal(personalId, o.date, turnos[o.date][personalId]);
                      }

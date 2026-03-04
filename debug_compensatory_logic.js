@@ -46,7 +46,8 @@ function calculatePersonalReportStats(personalId, yearFilter) {
         if (!t) return;
 
         // Compensatorios (Logic for Global Balance AND Filtered View)
-        if (t.tipo === 'guardia_fija' && t.compensatorioGenerado) {
+        // Se permite compensatorioGenerado en cualquier tipo (ej. guardia_fija, cambios_guardia)
+        if (t.compensatorioGenerado) {
             const amount = parseFloat(t.compensatorioGenerado) || 0;
             
             // Global Tracking (check reset date)

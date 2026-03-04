@@ -12,6 +12,9 @@ let personal = [
 function getCompensatoryBalance(personalId) {
     let generated = 0;
     let taken = 0;
+    const explicitGens = {}; 
+    const missingGenUses = {}; 
+    const useMetadata = {}; 
     const p = personal.find(x => x.id === personalId);
     const resetDate = p && p.compensatoryResetDate ? p.compensatoryResetDate : null;
     
@@ -21,23 +24,31 @@ function getCompensatoryBalance(personalId) {
         if (turnos[date]) {
             const t = turnos[date][personalId];
             if (t) {
-                // Check reset date
-                let isAfterReset = true;
-                if (resetDate && date < resetDate) {
-                    isAfterReset = false;
-                }
-
+                let isAfterReset = (resetDate && date < resetDate) ? false : true;
                 if (isAfterReset) {
-                    if (t.tipo === 'guardia_fija' && t.compensatorioGenerado) {
-                        generated += parseFloat(t.compensatorioGenerado) || 0;
+                    if (t.compensatorioGenerado) {
+                        explicitGens[date] = parseFloat(t.compensatorioGenerado) || 0;
                     }
                     if (t.tipo === 'compensatorio') {
                         taken += 1;
+                        const src = t.fechaTrabajoRealizado;
+                        if (src) {
+                            missingGenUses[src] = (missingGenUses[src] || 0) + 1;
+                            if (t.sourceAmount) useMetadata[src] = parseFloat(t.sourceAmount);
+                        }
                     }
                 }
             }
         }
     });
+
+    generated = Object.values(explicitGens).reduce((a, b) => a + b, 0);
+    Object.keys(missingGenUses).forEach(src => {
+        if (explicitGens[src] === undefined) {
+            generated += (useMetadata[src] || missingGenUses[src]);
+        }
+    });
+
     return generated - taken;
 }
 

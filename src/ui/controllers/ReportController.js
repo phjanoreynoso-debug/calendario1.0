@@ -107,6 +107,9 @@ export class ReportController {
     calculateCompensatoryBalance(personalId) {
          let generated = 0;
          let taken = 0;
+         const explicitGens = {}; // date -> amount
+         const missingGenUses = {}; // date -> totalTaken
+         const useMetadata = {}; // date -> sourceAmount (from any use)
          
          if (!this.turnos) return 0;
          
@@ -114,15 +117,32 @@ export class ReportController {
             if (this.turnos[date]) {
                  const t = this.turnos[date][personalId];
                  if (t) {
-                     if (t.tipo === 'guardia_fija' && t.compensatorioGenerado) {
-                         generated += parseFloat(t.compensatorioGenerado) || 0;
+                     if (t.compensatorioGenerado) {
+                         explicitGens[date] = parseFloat(t.compensatorioGenerado) || 0;
                      }
                      if (t.tipo === 'compensatorio') {
                          taken += 1;
+                         const src = t.fechaTrabajoRealizado;
+                         if (src) {
+                             missingGenUses[src] = (missingGenUses[src] || 0) + 1;
+                             if (t.sourceAmount) useMetadata[src] = parseFloat(t.sourceAmount);
+                         }
                      }
                  }
              }
          });
+
+         // Total Generated = Sum of all explicit
+         generated = Object.values(explicitGens).reduce((a, b) => a + b, 0);
+         
+         // Recover generations from missing origins
+         Object.keys(missingGenUses).forEach(src => {
+             if (explicitGens[src] === undefined) {
+                 const recovered = useMetadata[src] || missingGenUses[src];
+                 generated += recovered;
+             }
+         });
+
          return generated - taken;
     }
 }
